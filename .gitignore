@@ -1,0 +1,22 @@
+﻿# JetBrains
+.idea/
+
+# Wally generated deps
+Packages/
+
+# Rojo / Luau LSP generated
+sourcemap.json
+
+# Mise internals (если появятся)
+.mise/
+.mise.toml.lock
+
+# Local dev artifacts / logs
+.dev/
+
+# Backups
+*.bak
+
+# OS junk
+.DS_Store
+Thumbs.db

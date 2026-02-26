@@ -1,0 +1,14 @@
+[tools]
+"github:rojo-rbx/rojo" = "latest"
+"github:UpliftGames/wally" = "latest"
+stylua = "latest"
+"github:Kampfkarren/selene" = "latest"
+
+[tasks.serve]
+run = "rojo serve default.project.json"
+
+[tasks.sourcemap]
+run = "rojo sourcemap --watch default.project.json --output sourcemap.json"
+
+[tasks.deps]
+run = "wally install"
