@@ -11,10 +11,10 @@ if (!(Test-Path $PidsPath)) {
 $pids = Get-Content $PidsPath -Raw | ConvertFrom-Json
 
 foreach ($name in @("rojoServe", "sourcemap")) {
-    $pid = $pids.$name
-    if ($pid -and (Get-Process -Id $pid -ErrorAction SilentlyContinue)) {
-        Write-Host "Stopping $name (PID=$pid)..."
-        Stop-Process -Id $pid -Force
+    $procId = $pids.$name
+    if ($procId -and (Get-Process -Id $procId -ErrorAction SilentlyContinue)) {
+        Write-Host "Stopping $name (PID=$procId)..."
+        Stop-Process -Id $procId -Force
     } else {
         Write-Host "$name уже не запущен."
     }

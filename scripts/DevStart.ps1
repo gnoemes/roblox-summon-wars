@@ -12,48 +12,71 @@ if (!(Test-Path $ProjectFile)) {
     throw "Не найден default.project.json в корне проекта: $Root"
 }
 
-# Если нет Packages — зависимости не установлены (или ты их удалил)
-if (!(Test-Path (Join-Path $Root "Packages"))) {
-    Write-Host "Packages/ не найден. Запускаю wally install..."
-    & mise install | Out-Host
-    & mise x -- wally install | Out-Host
+# ---- Resolve pwsh path (PowerShell 7) ----
+$Pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
+if (-not $Pwsh) {
+    $candidates = @(
+        "C:\Program Files\PowerShell\7\pwsh.exe",
+        "C:\Program Files\PowerShell\7-preview\pwsh.exe"
+    )
+    $Pwsh = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+if (-not $Pwsh) {
+    throw "Не найден pwsh.exe. Проверь установку PowerShell 7 или PATH."
 }
 
-$RojoLog = Join-Path $LogDir "rojo-serve.log"
-$SourcemapLog = Join-Path $LogDir "sourcemap-watch.log"
+# ---- Resolve mise path ----
+$Mise = (Get-Command mise -ErrorAction SilentlyContinue).Source
+if (-not $Mise) {
+    throw "Не найден mise в PATH для текущего shell. Запусти скрипт из pwsh или добавь mise в PATH."
+}
+
+# Если нет Packages — зависимости не установлены
+if (!(Test-Path (Join-Path $Root "Packages"))) {
+    Write-Host "Packages/ не найден. Запускаю wally install..."
+    & $Mise install | Out-Host
+    & $Mise x -- wally install | Out-Host
+}
+
+$RojoOut = Join-Path $LogDir "rojo-serve.out.log"
+$RojoErr = Join-Path $LogDir "rojo-serve.err.log"
+$SmOut   = Join-Path $LogDir "sourcemap-watch.out.log"
+$SmErr   = Join-Path $LogDir "sourcemap-watch.err.log"
 
 # Rojo serve
 $RojoProc = Start-Process -PassThru -WindowStyle Minimized `
-    -FilePath "pwsh" `
+    -FilePath $Pwsh `
     -ArgumentList @(
-        "-NoLogo", "-NoProfile",
-        "-Command",
-        "Set-Location -LiteralPath `"$Root`"; mise x -- rojo serve default.project.json"
-    ) `
-    -RedirectStandardOutput $RojoLog `
-    -RedirectStandardError $RojoLog
+    "-NoLogo", "-NoProfile",
+    "-Command",
+    "Set-Location -LiteralPath `"$Root`"; & `"$Mise`" x -- rojo serve default.project.json"
+) `
+    -RedirectStandardOutput $RojoOut `
+    -RedirectStandardError  $RojoErr
 
-# Sourcemap watch (для Luau LSP / IntelliJ Luau plugin)
+# Sourcemap watch
 $SmProc = Start-Process -PassThru -WindowStyle Minimized `
-    -FilePath "pwsh" `
+    -FilePath $Pwsh `
     -ArgumentList @(
-        "-NoLogo", "-NoProfile",
-        "-Command",
-        "Set-Location -LiteralPath `"$Root`"; mise x -- rojo sourcemap --watch default.project.json --output sourcemap.json"
-    ) `
-    -RedirectStandardOutput $SourcemapLog `
-    -RedirectStandardError $SourcemapLog
+    "-NoLogo", "-NoProfile",
+    "-Command",
+    "Set-Location -LiteralPath `"$Root`"; & `"$Mise`" x -- rojo sourcemap --watch default.project.json --output sourcemap.json"
+) `
+    -RedirectStandardOutput $SmOut `
+    -RedirectStandardError  $SmErr
 
 @{
     started   = (Get-Date).ToString("o")
     rojoServe = $RojoProc.Id
     sourcemap = $SmProc.Id
     logs      = @{
-        rojoServe = $RojoLog
-        sourcemap = $SourcemapLog
+        rojoServeOut = $RojoOut
+        rojoServeErr = $RojoErr
+        sourcemapOut = $SmOut
+        sourcemapErr = $SmErr
     }
-} | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $DevDir "pids.json") -Encoding UTF8
+} | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $DevDir "pids.json") -Encoding UTF8
 
 Write-Host "OK. Rojo serve PID=$($RojoProc.Id), Sourcemap PID=$($SmProc.Id)"
 Write-Host "Логи: $LogDir"
-Write-Host "Дальше: открой Roblox Studio -> Rojo plugin -> Connect."
+Write-Host "Дальше: Roblox Studio -> Rojo plugin -> Connect."
