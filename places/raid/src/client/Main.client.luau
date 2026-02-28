@@ -10,6 +10,6 @@ local events = {
 }
 
 ECS.startLoop(world, Systems, events, {
-	place = "hub",
+	place = "raid",
 	side = "client",
 })

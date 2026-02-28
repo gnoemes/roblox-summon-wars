@@ -1,3 +1,4 @@
+-- ServerScriptService/Main.server.lua
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -6,10 +7,10 @@ local Systems = require(script.Parent:WaitForChild("Systems"))
 
 local world = ECS.createWorld()
 local events = {
-	default = RunService.RenderStepped,
+	default = RunService.Heartbeat,
 }
 
 ECS.startLoop(world, Systems, events, {
-	place = "hub",
-	side = "client",
+	place = "raid",
+	side = "server",
 })

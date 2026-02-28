@@ -2,21 +2,21 @@
 
 Этот репозиторий использует файловый воркфлоу (IDE → файлы → Rojo → Roblox Studio), а не редактирование кода внутри Studio.
 
-Ниже описаны скрипты в `./scripts`, их назначение и когда их запускать.
+Ниже описаны скрипты в `./tools`, их назначение и когда их запускать.
 
 ---
 
 ## Основные скрипты
 
-### 1) `scripts/Dev.ps1` — управление дев-сессией (start/stop/restart/status)
+### 1) `tools/Dev.ps1` — управление дев-сессией (start/stop/restart/status)
 
 **Что делает:**
 - Это **единый управляющий скрипт**, который запускает и контролирует все дев-процессы.
 - Команда **`start`**:
   - поднимает **Rojo serve** для live-синка проекта в Roblox Studio;
-  - поднимает **Rojo sourcemap --watch** для генерации/обновления `sourcemap.json` (нужно для Luau LSP/IDE);
+  - поднимает **Rojo sourcemap --watch** для генерации/обновления `.dev/sourcemap.{place}.json` (нужно для Luau LSP/IDE);
   - пишет логи в `.dev/logs/`;
-  - сохраняет состояние/процессы в `.dev/state.json`;
+  - сохраняет состояние/процессы в `.dev/state.{place}.json`;
   - **не завершается сам** — остаётся “живым” процессом (чтобы IDE могла считать его запущенным и останавливать кнопкой Stop).
 - Команда **`stop`**:
   - останавливает процессы дев-сессии по сохранённому state;
@@ -33,19 +33,19 @@
 - **`status`** — когда непонятно, запущена ли сессия и какие процессы реально живы.
 
 **Как использовать (основной сценарий):**
-1) Запусти `scripts/Dev.ps1 start` (лучше как Run Configuration в IDE).
+1) Запусти `tools/Dev.ps1 start -Place hub` или `tools/Dev.ps1 start -Place raid` (лучше как Run Configuration в IDE).
 2) Открой Roblox Studio → Rojo plugin → **Connect**.
 3) Редактируй код в IDE → проверяй через Play/Stop в Studio.
 4) Для завершения:
   - нажми **Stop** в IDE (скрипт корректно остановит дочерние процессы),
-  - или выполни `scripts/Dev.ps1 stop`.
+  - или выполни `tools/Dev.ps1 stop`.
 
 **Примечание:**
-- Если тебе нужно “быстро перезапустить” — используй `scripts/Dev.ps1 restart` вместо ручного stop/start.
+- Если тебе нужно “быстро перезапустить” — используй `tools/Dev.ps1 restart -Place hub|raid` вместо ручного stop/start.
 
 ---
 
-### 2) `scripts/Check.ps1` — проверка перед коммитом (format + lint + build)
+### 2) `tools/Check.ps1` — проверка перед коммитом (format + lint + build)
 **Что делает:**
 - Запускает форматирование (через `Fmt.ps1`).
 - Запускает линт (через `Lint.ps1`).
@@ -60,7 +60,7 @@
 
 ## Дополнительные скрипты
 
-### `scripts/Deps.ps1` — установка/обновление зависимостей (Wally)
+### `tools/Deps.ps1` — установка/обновление зависимостей (Wally)
 **Что делает:**
 - Выполняет `mise install` (ставит инструменты из `mise.toml`).
 - Выполняет `wally install` (обновляет папку `Packages/`).
@@ -72,9 +72,9 @@
 
 ---
 
-### `scripts/Fmt.ps1` — форматирование кода (StyLua)
+### `tools/Fmt.ps1` — форматирование кода (StyLua)
 **Что делает:**
-- Запускает `stylua` по исходникам (обычно `src/`).
+- Запускает `stylua` по исходникам (обычно `places/*/src` и `common/src`).
 
 **Когда вызывать:**
 - Перед коммитом (обычно через `Check.ps1`).
@@ -85,9 +85,9 @@
 
 ---
 
-### `scripts/Lint.ps1` — статический анализ (Selene)
+### `tools/Lint.ps1` — статический анализ (Selene)
 **Что делает:**
-- Запускает `selene` по исходникам (обычно `src/`).
+- Запускает `selene` по исходникам (обычно `places/*/src` и `common/src`).
 
 **Когда вызывать:**
 - Перед коммитом (обычно через `Check.ps1`).
@@ -98,7 +98,7 @@
 
 ---
 
-### `scripts/TailLogs.ps1` — просмотр логов дев-процессов
+### `tools/TailLogs.ps1` — просмотр логов дев-процессов
 **Что делает:**
 - Показывает/подписывается на логи из `.dev/logs/` (полезно, если Rojo/LSP что-то ругается).
 
@@ -111,30 +111,34 @@
 ## Рекомендованный ежедневный флоу
 
 ### Начало сессии
-1) (Опционально) `scripts/Deps.ps1` — если были изменения в зависимостях или после `git pull`.
-2) `scripts/DevStart.ps1`
+1) (Опционально) `tools/Deps.ps1` — если были изменения в зависимостях или после `git pull`.
+2) `tools/Dev.ps1 start -Place hub` (или `-Place raid`)
 3) Roblox Studio → Rojo plugin → Connect
 4) Разработка в IDE → Play/Stop в Studio для проверки.
 
 ### Перед коммитом
-1) `scripts/Check.ps1`
+1) `tools/Check.ps1`
 2) `git commit` / `git push`
 
 ### Конец сессии
-1) `scripts/DevStop.ps1`
+1) `tools/Dev.ps1 stop -Place hub` (или `-Place raid`)
 
 ---
 
 ## Где что хранится
 
-- Исходники: `src/`
+- Исходники:
+  - `places/hub/src`
+  - `places/raid/src`
+  - `common/src` (общий код для обоих places)
 - Зависимости (генерируется): `Packages/` *(не коммитится)*
-- Sourcemap (генерируется): `sourcemap.json` *(не коммитится)*
+- Sourcemap (генерируется): `.dev/sourcemap.{place}.json` *(не коммитится)*
 - Артефакты и логи (генерируется): `.dev/` *(не коммитится)*
 - Конфиги:
-    - `default.project.json` — Rojo project
-    - `wally.toml` / `wally.lock` — зависимости
-    - `.stylua.toml` — правила форматирования
-    - `selene.toml` — правила линтинга
+  - `places/hub/default.project.json` — Rojo project (Hub)
+  - `places/raid/default.project.json` — Rojo project (Raid)
+  - `wally.toml` / `wally.lock` — зависимости
+  - `.stylua.toml` — правила форматирования
+  - `selene.toml` — правила линтинга
 
 ---

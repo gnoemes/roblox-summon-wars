@@ -20,9 +20,9 @@
 - `wally.toml` и `wally.lock` — зависимости и lockfile.
 - `default.project.json` (или `*.project.json`) — Rojo-описание DataModel.
 - `.stylua.toml` / `stylua.toml` и `selene.toml` — стандарты форматирования и линта.
-- структура `src/` и существующие Feature-папки — чтобы **не дублировать** уже реализованное.
+- структура `places/*/src` и существующие Feature-папки — чтобы **не дублировать** уже реализованное.
 
-**Если нужные файлы/фрагменты не предоставлены** (или пользователь пишет “пустой проект”), запроси необходимые куски (минимум: `wally.toml`, `default.project.json`, структура `src/Shared`, `src/Game`, `src/Features`) и **остановись** до получения, либо предложи продолжить с явными допущениями.
+**Если нужные файлы/фрагменты не предоставлены** (или пользователь пишет “пустой проект”), запроси необходимые куски (минимум: `wally.toml`, `places/*/default.project.json`, структура `common/src/shared`, `places/*/src`, `common/src` если используется) и **остановись** до получения, либо предложи продолжить с явными допущениями.
 
 В начале каждого ответа кратко укажи, что проверил (1–3 пункта), например:
 
@@ -58,30 +58,22 @@
 ```text
 /
   mise.toml
-  default.project.json
   wally.toml
   wally.lock
   selene.toml
   .stylua.toml
 
-  src/
-    Shared/          # чистая логика/данные/протоколы/утилиты (без side-effects)
-    Server/          # серверный runtime: авторитет, валидация, сохранения
-    Client/          # UI, input, эффекты, локальная визуализация
-
-    Game/            # composition root: сборка зависимостей, запуск систем
-      ServerMain.server.lua
-      ClientMain.client.lua
-
-    Features/
-      Pets/
-        Shared/
-        Server/
-        Client/
-      Raids/
-      Economy/
-      UI/
-      ...
+  common/
+    src/
+      shared/        # чистая логика/данные/протоколы/утилиты (без side-effects)
+      server/        # общий серверный код (используется/подключается place-слоем)
+      client/        # общий клиентский код (используется/подключается place-слоем)
   places/
-    Hub/
-    Raid/
+    hub/
+      src/
+        server/      # серверный runtime Hub
+        client/      # клиентский runtime Hub
+    raid/
+      src/
+        server/      # серверный runtime Raid
+        client/      # клиентский runtime Raid
