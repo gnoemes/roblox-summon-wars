@@ -1,16 +1,34 @@
 ﻿param(
     [ValidateSet("start","stop","restart","status")]
-    [string]$Command = "start"
+    [string]$Command = "start",
+
+# какой place поднимать
+    [ValidateSet("hub","raid")]
+    [string]$Place = "hub",
+
+# Если захочешь поднимать два плейса параллельно — запусти второй раз с другим портом
+    [int]$Port = 34872
 )
+
+Write-Host "RUNNING Dev.ps1 from: $PSCommandPath"
 
 $ErrorActionPreference = "Stop"
 
 $Root    = Resolve-Path (Join-Path $PSScriptRoot "..")
 $DevDir  = Join-Path $Root ".dev"
 $LogDir  = Join-Path $DevDir "logs"
-$State   = Join-Path $DevDir "state.json"
+
+# ВАЖНО: state per-place, иначе hub и raid будут перетирать друг друга.
+$State   = Join-Path $DevDir ("state.{0}.json" -f $Place)
 
 New-Item -ItemType Directory -Force $LogDir | Out-Null
+
+function Quote-Arg([string]$s) {
+    if ($null -eq $s) { return '""' }
+    # Для CreateProcess: путь с пробелами должен быть в кавычках.
+    # Внутренние кавычки (если вдруг есть) экранируем.
+    return '"' + ($s -replace '"', '\"') + '"'
+}
 
 function Get-RunningState {
     if (!(Test-Path $State)) { return $null }
@@ -33,7 +51,7 @@ function Stop-Pids($st) {
     }
 
     # Добиваем всё, что слушает Rojo порт (страховка от "старых" процессов)
-    $port = 34872
+    $port = if ($st.port) { [int]$st.port } else { 34872 }
     $conns = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
     if ($conns) {
         $pids = $conns | Select-Object -ExpandProperty OwningProcess -Unique
@@ -50,8 +68,9 @@ function Stop-Pids($st) {
 function Start-Dev {
     Set-Location $Root
 
-    if (!(Test-Path (Join-Path $Root "default.project.json"))) {
-        throw "Не найден default.project.json в корне проекта: $Root"
+    $ProjectFile = Join-Path $Root ("places/{0}/default.project.json" -f $Place)
+    if (!(Test-Path $ProjectFile)) {
+        throw "Не найден project json для place '$Place': $ProjectFile"
     }
 
     $mise = (Get-Command mise -ErrorAction SilentlyContinue).Source
@@ -64,38 +83,63 @@ function Start-Dev {
         & $mise x -- wally install | Out-Host
     }
 
-    $RojoOut = Join-Path $LogDir "rojo-serve.out.log"
-    $RojoErr = Join-Path $LogDir "rojo-serve.err.log"
-    $SmOut   = Join-Path $LogDir "sourcemap-watch.out.log"
-    $SmErr   = Join-Path $LogDir "sourcemap-watch.err.log"
+    $RojoOut = Join-Path $LogDir ("rojo-serve.{0}.out.log" -f $Place)
+    $RojoErr = Join-Path $LogDir ("rojo-serve.{0}.err.log" -f $Place)
+    $SmOut   = Join-Path $LogDir ("sourcemap-watch.{0}.out.log" -f $Place)
+    $SmErr   = Join-Path $LogDir ("sourcemap-watch.{0}.err.log" -f $Place)
 
-    # ВАЖНО: запускаем детей через powershell.exe (тот же движок), чтобы проще было с окружением IDE.
-    # Не важно 5.1 или 7 — нам нужен один "родитель", который их держит.
-    $Shell = (Get-Command powershell -ErrorAction SilentlyContinue).Source
-    if (-not $Shell) { throw "Не найден powershell.exe" }
+    $SourcemapOutFile = Join-Path $Root (".dev/sourcemap.{0}.json" -f $Place)
 
+    # Принудительно квотим пути (из-за пробелов в "Roblox Projects")
+    $ProjectArg   = Quote-Arg $ProjectFile
+    $SourcemapArg = Quote-Arg $SourcemapOutFile
+
+    Write-Host "Starting dev:"
+    Write-Host "  place=$Place port=$Port"
+    Write-Host "  project=$ProjectFile"
+    Write-Host "  sourcemap=$SourcemapOutFile"
+    Write-Host ""
+    Write-Host "MISE: $mise"
+    Write-Host "PROJECT: [$ProjectFile]"
+    Write-Host "ROOT: [$Root]"
+    Write-Host ""
+
+    Write-Host "ARGS serve:"
+    @("x","--","rojo","serve","--port","$Port",$ProjectArg) | ForEach-Object { Write-Host "  $_" }
+
+    Write-Host "ARGS sourcemap:"
+    @("x","--","rojo","sourcemap","--watch","--output",$SourcemapArg,$ProjectArg) | ForEach-Object { Write-Host "  $_" }
+
+    # ✅ Запускаем mise напрямую (без powershell -Command), и даём ему уже квотнутые пути.
+    # ВНИМАНИЕ: project аргумент должен быть ПОСЛЕДНИМ, иначе rojo ругается.
     $RojoProc = Start-Process -PassThru -WindowStyle Minimized `
-        -FilePath $Shell `
+        -WorkingDirectory $Root `
+        -FilePath $mise `
         -ArgumentList @(
-        "-NoLogo", "-NoProfile",
-        "-Command",
-        "Set-Location -LiteralPath `"$Root`"; & `"$mise`" x -- rojo serve default.project.json"
+        "x","--","rojo","serve",
+        "--port", "$Port",
+        $ProjectArg
     ) `
         -RedirectStandardOutput $RojoOut `
         -RedirectStandardError  $RojoErr
 
     $SmProc = Start-Process -PassThru -WindowStyle Minimized `
-        -FilePath $Shell `
+        -WorkingDirectory $Root `
+        -FilePath $mise `
         -ArgumentList @(
-        "-NoLogo", "-NoProfile",
-        "-Command",
-        "Set-Location -LiteralPath `"$Root`"; & `"$mise`" x -- rojo sourcemap --watch default.project.json --output sourcemap.json"
+        "x","--","rojo","sourcemap",
+        "--watch",
+        "--output", $SourcemapArg,
+        $ProjectArg
     ) `
         -RedirectStandardOutput $SmOut `
         -RedirectStandardError  $SmErr
 
     Save-State @{
         started   = (Get-Date).ToString("o")
+        place     = $Place
+        port      = $Port
+        project   = $ProjectFile
         rojoServe = $RojoProc.Id
         sourcemap = $SmProc.Id
         logs      = @{
@@ -106,20 +150,18 @@ function Start-Dev {
         }
     }
 
+    Write-Host ""
     Write-Host "Dev started:"
     Write-Host "  rojoServe PID=$($RojoProc.Id)"
     Write-Host "  sourcemap PID=$($SmProc.Id)"
     Write-Host "Logs: $LogDir"
     Write-Host ""
     Write-Host "Открой Roblox Studio -> Rojo plugin -> Connect."
-    Write-Host "Чтобы остановить: нажми Stop в IDE или Ctrl+C в терминале."
 
-    # Родительский процесс висит и ждёт, пока ты нажмёшь Stop/Ctrl+C
     try {
         while ($true) {
             Start-Sleep -Seconds 1
 
-            # если один из детей умер — подсказать
             $a = Get-Process -Id $RojoProc.Id -ErrorAction SilentlyContinue
             $b = Get-Process -Id $SmProc.Id -ErrorAction SilentlyContinue
             if (-not $a) { Write-Host "WARNING: rojo serve остановился. См. $RojoErr" }
@@ -140,6 +182,9 @@ switch ($Command) {
         $st = Get-RunningState
         if (-not $st) { Write-Host "Not running."; exit 0 }
         Write-Host ("Started: " + $st.started)
+        Write-Host ("Place:   " + $st.place)
+        Write-Host ("Port:    " + $st.port)
+        Write-Host ("Project: " + $st.project)
         foreach ($n in @("rojoServe","sourcemap")) {
             $procId = $st.$n
             $alive = $false
@@ -165,7 +210,6 @@ switch ($Command) {
     }
 
     default { # start
-        # если уже бежит — делаем restart (чтобы не плодить висяки)
         $st = Get-RunningState
         if ($st) {
             Write-Host "Already running -> restarting..."

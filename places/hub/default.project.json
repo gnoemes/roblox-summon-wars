@@ -1,0 +1,21 @@
+{
+  "name": "Incubator-Zero-Hub",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$ignoreUnknownInstances": true,
+      "Shared": { "$path": "../../common/src/shared" },
+      "Packages": { "$path": "../../Packages" },
+    },
+    "ServerScriptService": {
+      "$path": "src/server",
+      "ServerShared": { "$path": "../../common/src/server" }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "$path": "src/client",
+        "ClientShared": { "$path": "../../common/src/client" }
+      }
+    }
+  }
+}
