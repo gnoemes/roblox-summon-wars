@@ -1,7 +1,16 @@
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local ECS = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ECS"))
+local function requireECS()
+	local ecs = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ECS")
+	if ecs:IsA("ModuleScript") then
+		return require(ecs)
+	end
+	local init = ecs:WaitForChild("init")
+	return require(init)
+end
+
+local ECS = requireECS()
 local Systems = require(script.Parent:WaitForChild("Systems"))
 
 local world = ECS.createWorld()
