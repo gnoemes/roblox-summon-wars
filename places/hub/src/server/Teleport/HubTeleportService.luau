@@ -8,6 +8,9 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Places = require(Shared:WaitForChild("Config"):WaitForChild("Places"))
 local Remotes = require(Shared:WaitForChild("Net"):WaitForChild("Remotes"))
 local TeleportData = require(Shared:WaitForChild("Teleport"):WaitForChild("TeleportData"))
+local PartyService = require(
+	script.Parent.Parent:WaitForChild("Features"):WaitForChild("Party"):WaitForChild("PartyService")
+)
 
 local HubTeleportService = {}
 
@@ -15,7 +18,7 @@ local teleporting = {}
 
 local function makeTeleportData(player)
 	local sessionId = HttpService:GenerateGUID(false)
-	local partyUserIds = { player.UserId }
+	local partyUserIds = PartyService.getPartyUserIds(player)
 	local createdAt = os.time()
 
 	return TeleportData.build({
@@ -25,7 +28,8 @@ local function makeTeleportData(player)
 		partyUserIds = partyUserIds,
 		hubPlaceId = Places.Hub,
 		raidPlaceId = Places.Raid,
-	}), sessionId
+	}),
+		sessionId
 end
 
 local function requestRaid(player)
@@ -37,6 +41,10 @@ local function requestRaid(player)
 		return { ok = false, error = "StudioTeleportDisabled" }
 	end
 
+	if not PartyService.isLeader(player) then
+		return { ok = false, error = "NotPartyLeader" }
+	end
+
 	if teleporting[player.UserId] then
 		return { ok = false, error = "TeleportInProgress" }
 	end
@@ -46,12 +54,13 @@ local function requestRaid(player)
 	local ok, result = pcall(function()
 		local accessCode = TeleportService:ReserveServer(Places.Raid)
 		local teleportData, sessionId = makeTeleportData(player)
+		local party = PartyService.getPartyMembers(player)
 
 		local options = Instance.new("TeleportOptions")
 		options.ReservedServerAccessCode = accessCode
 		options:SetTeleportData(teleportData)
-
-		TeleportService:TeleportAsync(Places.Raid, { player }, options)
+		task.wait(1)
+		TeleportService:TeleportAsync(Places.Raid, party, options)
 		return sessionId
 	end)
 

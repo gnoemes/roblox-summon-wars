@@ -71,13 +71,16 @@ local function requestRaid()
 			return
 		end
 
-		if type(result) == "table" and result.ok then
-			resultOk = true
-		else
-			resultOk = false
-			resultErr = type(result) == "table" and result.error or "UnknownError"
+	if type(result) == "table" and result.ok then
+		resultOk = true
+	else
+		resultOk = false
+		resultErr = type(result) == "table" and result.error or "UnknownError"
+		if resultErr == "NotPartyLeader" then
+			resultErr = "Only leader can start"
 		end
-	end)
+	end
+end)
 
 	task.delay(8, function()
 		if finished then

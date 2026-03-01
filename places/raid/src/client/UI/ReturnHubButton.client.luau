@@ -76,6 +76,9 @@ local function requestReturn()
 		else
 			resultOk = false
 			resultErr = type(result) == "table" and result.error or "UnknownError"
+			if resultErr == "NotPartyLeader" then
+				resultErr = "Only leader can return"
+			end
 		end
 	end)
 

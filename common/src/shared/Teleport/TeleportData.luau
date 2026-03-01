@@ -57,6 +57,16 @@ function TeleportData.validate(data, places)
 	if data.direction ~= "hub_to_raid" then
 		return false, "InvalidDirection"
 	end
+	local hasRequester = false
+	for _, userId in ipairs(data.partyUserIds) do
+		if userId == data.requestedByUserId then
+			hasRequester = true
+			break
+		end
+	end
+	if not hasRequester then
+		return false, "RequesterNotInParty"
+	end
 	return true, nil
 end
 

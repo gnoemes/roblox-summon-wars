@@ -6,6 +6,9 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 
 local Places = require(Shared:WaitForChild("Config"):WaitForChild("Places"))
 local TeleportData = require(Shared:WaitForChild("Teleport"):WaitForChild("TeleportData"))
+local RewardsService = require(
+	script.Parent.Parent:WaitForChild("Features"):WaitForChild("Rewards"):WaitForChild("RewardsService")
+)
 
 local RaidTeleportService = {}
 
@@ -22,6 +25,18 @@ local function validateJoin(player)
 		return false, reason
 	end
 
+	local inParty = false
+	for _, userId in ipairs(teleportData.partyUserIds) do
+		if userId == player.UserId then
+			inParty = true
+			break
+		end
+	end
+	if not inParty then
+		return false, "PlayerNotInParty"
+	end
+
+	RewardsService.grantTestRewards(player)
 	player:SetAttribute("RaidSessionId", teleportData.sessionId)
 	player:SetAttribute("RaidRequestedBy", teleportData.requestedByUserId)
 	return true
