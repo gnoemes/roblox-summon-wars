@@ -13,8 +13,12 @@ end
 
 local ECS = requireECS()
 local Systems = require(script.Parent:WaitForChild("Systems"))
-local HubTeleportService = require(script.Parent:WaitForChild("Teleport"):WaitForChild("HubTeleportService"))
-local HubReturnService = require(script.Parent:WaitForChild("Teleport"):WaitForChild("HubReturnService"))
+local HubTeleportService = require(
+	script.Parent:WaitForChild("Features"):WaitForChild("Travel"):WaitForChild("HubTeleportService")
+)
+local HubReturnService = require(
+	script.Parent:WaitForChild("Features"):WaitForChild("Travel"):WaitForChild("HubReturnService")
+)
 
 HubTeleportService.init()
 HubReturnService.init()

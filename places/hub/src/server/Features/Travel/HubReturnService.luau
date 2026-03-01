@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 
 local Places = require(Shared:WaitForChild("Config"):WaitForChild("Places"))
+local RewardConfig = require(Shared:WaitForChild("Config"):WaitForChild("Rewards"))
 local Remotes = require(Shared:WaitForChild("Net"):WaitForChild("Remotes"))
 local TeleportData = require(Shared:WaitForChild("Teleport"):WaitForChild("TeleportData"))
 
@@ -29,9 +30,10 @@ local function handleReturn(player)
 		if type(perUser) ~= "table" then
 			perUser = rewards
 		end
-		player:SetAttribute("RaidRewardsCredits", perUser.credits or 0)
-		player:SetAttribute("RaidRewardsBiomass", perUser.biomass or 0)
-		player:SetAttribute("RaidRewardsDNA", perUser.dna or 0)
+		for _, item in ipairs(RewardConfig.Types) do
+			local key = "RaidRewards_" .. item.id
+			player:SetAttribute(key, perUser[item.id] or 0)
+		end
 	end
 end
 
@@ -41,9 +43,9 @@ function HubReturnService.init()
 	local clearEvent = Remotes.getRemoteFunction(Remotes.ClearRaidSummary, true)
 	if clearEvent then
 		clearEvent.OnServerInvoke = function(player)
-			player:SetAttribute("RaidRewardsCredits", nil)
-			player:SetAttribute("RaidRewardsBiomass", nil)
-			player:SetAttribute("RaidRewardsDNA", nil)
+			for _, item in ipairs(RewardConfig.Types) do
+				player:SetAttribute("RaidRewards_" .. item.id, nil)
+			end
 			return true
 		end
 	end

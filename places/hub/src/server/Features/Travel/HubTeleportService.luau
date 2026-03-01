@@ -1,36 +1,19 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 
 local Places = require(Shared:WaitForChild("Config"):WaitForChild("Places"))
 local Remotes = require(Shared:WaitForChild("Net"):WaitForChild("Remotes"))
-local TeleportData = require(Shared:WaitForChild("Teleport"):WaitForChild("TeleportData"))
+local TravelBuilder = require(Shared:WaitForChild("Features"):WaitForChild("Travel"):WaitForChild("TravelBuilder"))
 local PartyService = require(
-	script.Parent.Parent:WaitForChild("Features"):WaitForChild("Party"):WaitForChild("PartyService")
+	script.Parent.Parent:WaitForChild("Party"):WaitForChild("PartyService")
 )
 
 local HubTeleportService = {}
 
 local teleporting = {}
-
-local function makeTeleportData(player)
-	local sessionId = HttpService:GenerateGUID(false)
-	local partyUserIds = PartyService.getPartyUserIds(player)
-	local createdAt = os.time()
-
-	return TeleportData.build({
-		sessionId = sessionId,
-		createdAt = createdAt,
-		requestedByUserId = player.UserId,
-		partyUserIds = partyUserIds,
-		hubPlaceId = Places.Hub,
-		raidPlaceId = Places.Raid,
-	}),
-		sessionId
-end
 
 local function requestRaid(player)
 	if not player or not player.Parent then
@@ -53,7 +36,10 @@ local function requestRaid(player)
 
 	local ok, result = pcall(function()
 		local accessCode = TeleportService:ReserveServer(Places.Raid)
-		local teleportData, sessionId = makeTeleportData(player)
+		local teleportData, sessionId = TravelBuilder.buildHubToRaid({
+			requestedByUserId = player.UserId,
+			partyUserIds = PartyService.getPartyUserIds(player),
+		})
 		local party = PartyService.getPartyMembers(player)
 
 		local options = Instance.new("TeleportOptions")

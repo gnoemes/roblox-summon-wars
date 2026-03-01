@@ -13,8 +13,12 @@ end
 
 local ECS = requireECS()
 local Systems = require(script.Parent:WaitForChild("Systems"))
-local RaidTeleportService = require(script.Parent:WaitForChild("Teleport"):WaitForChild("RaidTeleportService"))
-local RaidReturnService = require(script.Parent:WaitForChild("Teleport"):WaitForChild("RaidReturnService"))
+local RaidTeleportService = require(
+	script.Parent:WaitForChild("Features"):WaitForChild("Travel"):WaitForChild("RaidTeleportService")
+)
+local RaidReturnService = require(
+	script.Parent:WaitForChild("Features"):WaitForChild("Travel"):WaitForChild("RaidReturnService")
+)
 
 RaidTeleportService.init()
 RaidReturnService.init()

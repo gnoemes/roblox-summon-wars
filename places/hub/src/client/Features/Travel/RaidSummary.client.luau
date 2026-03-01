@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Net"):WaitForChild("Remotes"))
+local RewardConfig = require(Shared:WaitForChild("Config"):WaitForChild("Rewards"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -64,20 +65,24 @@ local function clearOnServer()
 end
 
 local function showSummary()
-	local credits = player:GetAttribute("RaidRewardsCredits")
-	local biomass = player:GetAttribute("RaidRewardsBiomass")
-	local dna = player:GetAttribute("RaidRewardsDNA")
+	local lines = {}
+	local hasAny = false
 
-	if not credits and not biomass and not dna then
+	for _, item in ipairs(RewardConfig.Types) do
+		local value = player:GetAttribute("RaidRewards_" .. item.id)
+		if value ~= nil then
+			hasAny = true
+		end
+		value = value or 0
+		table.insert(lines, ("%s: %d"):format(item.label, value))
+	end
+
+	if not hasAny then
 		frame.Visible = false
 		return
 	end
 
-	credits = credits or 0
-	biomass = biomass or 0
-	dna = dna or 0
-
-	details.Text = ("Credits: %d\nBiomass: %d\nDNA: %d"):format(credits, biomass, dna)
+	details.Text = table.concat(lines, "\n")
 	frame.Visible = true
 end
 
@@ -86,8 +91,8 @@ closeBtn.MouseButton1Click:Connect(function()
 	clearOnServer()
 end)
 
-player:GetAttributeChangedSignal("RaidRewardsCredits"):Connect(showSummary)
-player:GetAttributeChangedSignal("RaidRewardsBiomass"):Connect(showSummary)
-player:GetAttributeChangedSignal("RaidRewardsDNA"):Connect(showSummary)
+for _, item in ipairs(RewardConfig.Types) do
+	player:GetAttributeChangedSignal("RaidRewards_" .. item.id):Connect(showSummary)
+end
 
 task.defer(showSummary)

@@ -7,7 +7,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Places = require(Shared:WaitForChild("Config"):WaitForChild("Places"))
 local TeleportData = require(Shared:WaitForChild("Teleport"):WaitForChild("TeleportData"))
 local RewardsService = require(
-	script.Parent.Parent:WaitForChild("Features"):WaitForChild("Rewards"):WaitForChild("RewardsService")
+	script.Parent.Parent:WaitForChild("Rewards"):WaitForChild("RewardsService")
 )
 
 local RaidTeleportService = {}

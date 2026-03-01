@@ -1,3 +1,8 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local TravelConfig = require(Shared:WaitForChild("Config"):WaitForChild("Travel"))
+local PartyRules = require(Shared:WaitForChild("Features"):WaitForChild("Party"):WaitForChild("PartyRules"))
+
 local TeleportData = {}
 
 TeleportData.Version = 1
@@ -5,7 +10,7 @@ TeleportData.Version = 1
 function TeleportData.build(params)
 	return {
 		v = TeleportData.Version,
-		direction = "hub_to_raid",
+		direction = TravelConfig.HubToRaid,
 		sessionId = params.sessionId,
 		createdAt = params.createdAt,
 		requestedByUserId = params.requestedByUserId,
@@ -18,7 +23,7 @@ end
 function TeleportData.buildRaidReturn(params)
 	return {
 		v = TeleportData.Version,
-		direction = "raid_to_hub",
+		direction = TravelConfig.RaidToHub,
 		sessionId = params.sessionId,
 		createdAt = params.createdAt,
 		requestedByUserId = params.requestedByUserId,
@@ -54,18 +59,11 @@ function TeleportData.validate(data, places)
 	if data.raidPlaceId ~= places.Raid then
 		return false, "InvalidRaidPlace"
 	end
-	if data.direction ~= "hub_to_raid" then
+	if data.direction ~= TravelConfig.HubToRaid then
 		return false, "InvalidDirection"
 	end
-	local hasRequester = false
-	for _, userId in ipairs(data.partyUserIds) do
-		if userId == data.requestedByUserId then
-			hasRequester = true
-			break
-		end
-	end
-	if not hasRequester then
-		return false, "RequesterNotInParty"
+	if not PartyRules.isLeader(data.requestedByUserId, data.partyUserIds) then
+		return false, "RequesterNotLeader"
 	end
 	return true, nil
 end
@@ -95,8 +93,11 @@ function TeleportData.validateRaidReturn(data, places)
 	if data.raidPlaceId ~= places.Raid then
 		return false, "InvalidRaidPlace"
 	end
-	if data.direction ~= "raid_to_hub" then
+	if data.direction ~= TravelConfig.RaidToHub then
 		return false, "InvalidDirection"
+	end
+	if not PartyRules.isLeader(data.requestedByUserId, data.partyUserIds) then
+		return false, "RequesterNotLeader"
 	end
 	return true, nil
 end

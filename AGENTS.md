@@ -77,3 +77,24 @@
       src/
         server/      # серверный runtime Raid
         client/      # клиентский runtime Raid
+
+---
+
+## 5) Проектные договорённости (важно соблюдать)
+
+1) **Common-логика без дубликатов**
+   - Всё, что используется и в Hub, и в Raid, живёт в `common/src/shared` (и при необходимости в `common/src/client` / `common/src/server`).
+   - Любая кросс-place логика должна быть **data-driven** (через `Config/*`), а не копипастой в каждом place.
+
+2) **Features-структура**
+   - Фичи разделяются по папкам: `Features/<FeatureName>` в каждом place.
+   - Пример: `Features/Travel`, `Features/Party`, `Features/Rewards`.
+   - Клиентские UI/скрипты фич живут рядом с фичей: `places/*/src/client/Features/...`.
+
+3) **ModuleScript vs Script/LocalScript**
+   - `require` **нельзя** вызывать на `Script`/`LocalScript`. Только `ModuleScript`.
+   - LocalScript должен запускаться **сам**, без `require` из `Main.client`.
+
+4) **Data-driven**
+   - Все константы и системные правила должны быть в `common/src/shared/Config/*`.
+   - Place‑код должен работать от данных, не от хардкода.
