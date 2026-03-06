@@ -6,6 +6,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 
 local DebugConfig = require(Shared:WaitForChild("Features"):WaitForChild("Debug"):WaitForChild("DebugConfig"))
 local DebugClient = require(script.Parent:WaitForChild("DebugClient"))
+local DebugMenuUi = require(script.Parent:WaitForChild("DebugMenuUi"))
 
 local DebugMenuController = {}
 
@@ -34,99 +35,6 @@ end
 
 local function getViewEnabled(state, viewId)
 	return state.activeViews ~= nil and state.activeViews[viewId] == true
-end
-
-local function clearContainer(container)
-	for _, child in ipairs(container:GetChildren()) do
-		if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
-			child:Destroy()
-		end
-	end
-end
-
-local function createTextLabel(parent, text, height, textSize, color)
-	local label = Instance.new("TextLabel")
-	label.BackgroundTransparency = 1
-	label.Size = UDim2.new(1, 0, 0, height)
-	label.Text = text
-	label.TextColor3 = color or Color3.fromRGB(225, 225, 225)
-	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.TextYAlignment = Enum.TextYAlignment.Center
-	label.TextWrapped = true
-	label.Font = Enum.Font.Code
-	label.TextSize = textSize or 15
-	label.Parent = parent
-	return label
-end
-
-local function createButton(parent, text, onActivated, options)
-	local button = Instance.new("TextButton")
-	button.AutoButtonColor = true
-	button.Size = UDim2.new(1, 0, 0, options and options.height or 34)
-	button.BackgroundColor3 = options and options.backgroundColor3 or Color3.fromRGB(54, 66, 84)
-	button.TextColor3 = options and options.textColor3 or Color3.fromRGB(245, 245, 245)
-	button.Font = Enum.Font.Code
-	button.TextSize = options and options.textSize or 15
-	button.Text = text
-	button.Parent = parent
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = button
-
-	button.Activated:Connect(onActivated)
-	return button
-end
-
-local function createSection(parent, titleText)
-	local section = Instance.new("Frame")
-	section.BackgroundTransparency = 1
-	section.AutomaticSize = Enum.AutomaticSize.Y
-	section.Size = UDim2.new(1, 0, 0, 0)
-	section.Parent = parent
-
-	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 8)
-	layout.FillDirection = Enum.FillDirection.Vertical
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = section
-
-	createTextLabel(section, titleText, 20, 16, Color3.fromRGB(255, 227, 160))
-	return section
-end
-
-local function createButtonRow(parent)
-	local row = Instance.new("Frame")
-	row.BackgroundTransparency = 1
-	row.Size = UDim2.new(1, 0, 0, 34)
-	row.Parent = parent
-
-	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.Padding = UDim.new(0, 8)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = row
-
-	return row
-end
-
-local function createFillButton(parent, text, widthScale, onActivated, options)
-	local button = Instance.new("TextButton")
-	button.AutoButtonColor = true
-	button.Size = UDim2.new(widthScale, 0, 1, 0)
-	button.BackgroundColor3 = options and options.backgroundColor3 or Color3.fromRGB(54, 66, 84)
-	button.TextColor3 = options and options.textColor3 or Color3.fromRGB(245, 245, 245)
-	button.Font = Enum.Font.Code
-	button.TextSize = options and options.textSize or 15
-	button.Text = text
-	button.Parent = parent
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = button
-
-	button.Activated:Connect(onActivated)
-	return button
 end
 
 local function setStatus(text)
@@ -166,17 +74,19 @@ local function renderPetSection(parent, state)
 		return
 	end
 
-	local section = createSection(parent, "Pets")
-	createTextLabel(
+	local section = DebugMenuUi.createSection(parent, "Pets")
+	DebugMenuUi.createTextLabel(
 		section,
 		("Current: %s"):format(state.currentPetDefinitionId or "-"),
-		18,
-		14,
-		Color3.fromRGB(200, 200, 200)
+		{
+			height = 18,
+			textSize = 14,
+			color = Color3.fromRGB(200, 200, 200),
+		}
 	)
 
 	for _, petDefinition in ipairs(state.petDefinitions or {}) do
-		createButton(section, petDefinition.displayName or petDefinition.id, function()
+		DebugMenuUi.createButton(section, petDefinition.displayName or petDefinition.id, function()
 			executeAction("set_active_pet", {
 				definitionId = petDefinition.id,
 			})
@@ -189,7 +99,7 @@ local function renderEconomySection(parent, state)
 		return
 	end
 
-	local section = createSection(parent, "Economy")
+	local section = DebugMenuUi.createSection(parent, "Economy")
 
 	local totalLines = {}
 	for _, currency in ipairs(state.currencyTypes or {}) do
@@ -200,31 +110,26 @@ local function renderEconomySection(parent, state)
 		table.insert(totalLines, ("%s: %d"):format(currency.label or currency.id, amount))
 	end
 
-	createTextLabel(section, table.concat(totalLines, "\n"), 56, 14, Color3.fromRGB(200, 200, 200))
+	DebugMenuUi.createTextLabel(section, table.concat(totalLines, "\n"), {
+		height = 56,
+		textSize = 14,
+		color = Color3.fromRGB(200, 200, 200),
+	})
 
-	local amountBox = Instance.new("TextBox")
-	amountBox.Size = UDim2.new(1, 0, 0, 34)
-	amountBox.BackgroundColor3 = Color3.fromRGB(30, 38, 50)
-	amountBox.TextColor3 = Color3.fromRGB(245, 245, 245)
-	amountBox.Font = Enum.Font.Code
-	amountBox.TextSize = 15
-	amountBox.PlaceholderText = "Amount"
-	amountBox.Text = currencyAmountText
-	amountBox.ClearTextOnFocus = false
-	amountBox.Parent = section
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = amountBox
+	local amountBox = DebugMenuUi.createTextBox(section, {
+		placeholderText = "Amount",
+		text = currencyAmountText,
+		clearTextOnFocus = false,
+	})
 
 	amountBox.FocusLost:Connect(function()
 		currencyAmountText = amountBox.Text
 	end)
 
-	local presetRow = createButtonRow(section)
+	local presetRow = DebugMenuUi.createButtonRow(section)
 	local presetWidth = 1 / math.max(1, #DebugConfig.GrantAmountPresets) - 0.02
 	for _, presetAmount in ipairs(DebugConfig.GrantAmountPresets) do
-		createFillButton(presetRow, tostring(presetAmount), presetWidth, function()
+		DebugMenuUi.createFillButton(presetRow, tostring(presetAmount), presetWidth, function()
 			currencyAmountText = tostring(presetAmount)
 			amountBox.Text = currencyAmountText
 		end, {
@@ -233,7 +138,7 @@ local function renderEconomySection(parent, state)
 	end
 
 	for _, currency in ipairs(state.currencyTypes or {}) do
-		createButton(section, ("+ %s"):format(currency.label or currency.id), function()
+		DebugMenuUi.createButton(section, ("+ %s"):format(currency.label or currency.id), function()
 			local amount = tonumber(amountBox.Text)
 			if not amount then
 				setStatus("Invalid amount")
@@ -254,42 +159,35 @@ local function renderPartySection(parent, state)
 		return
 	end
 
-	local section = createSection(parent, "Party")
-	createTextLabel(
+	local section = DebugMenuUi.createSection(parent, "Party")
+	DebugMenuUi.createTextLabel(
 		section,
 		("Current: %s"):format(state.partyId or "-"),
-		18,
-		14,
-		Color3.fromRGB(200, 200, 200)
+		{
+			height = 18,
+			textSize = 14,
+			color = Color3.fromRGB(200, 200, 200),
+		}
 	)
 
-	local input = Instance.new("TextBox")
-	input.Size = UDim2.new(1, 0, 0, 34)
-	input.BackgroundColor3 = Color3.fromRGB(30, 38, 50)
-	input.TextColor3 = Color3.fromRGB(245, 245, 245)
-	input.Font = Enum.Font.Code
-	input.TextSize = 15
-	input.PlaceholderText = "PartyId"
-	input.Text = partyValueText
-	input.ClearTextOnFocus = false
-	input.Parent = section
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = input
+	local input = DebugMenuUi.createTextBox(section, {
+		placeholderText = "PartyId",
+		text = partyValueText,
+		clearTextOnFocus = false,
+	})
 
 	input.FocusLost:Connect(function()
 		partyValueText = input.Text
 	end)
 
-	local row = createButtonRow(section)
-	createFillButton(row, "Set", 0.49, function()
+	local row = DebugMenuUi.createButtonRow(section)
+	DebugMenuUi.createFillButton(row, "Set", 0.49, function()
 		partyValueText = input.Text
 		executeAction("set_party", {
 			value = input.Text,
 		})
 	end)
-	createFillButton(row, "Clear", 0.49, function()
+	DebugMenuUi.createFillButton(row, "Clear", 0.49, function()
 		partyValueText = ""
 		input.Text = ""
 		executeAction("set_party", {
@@ -305,11 +203,11 @@ local function renderViewsSection(parent, state)
 		return
 	end
 
-	local section = createSection(parent, "Views")
+	local section = DebugMenuUi.createSection(parent, "Views")
 	for _, viewId in ipairs(state.supportedViewIds or {}) do
 		local viewConfig = DebugConfig.Views[viewId]
 		local enabled = getViewEnabled(state, viewId)
-		createButton(section, ("%s [%s]"):format(viewConfig.label or viewId, if enabled then "ON" else "OFF"), function()
+		DebugMenuUi.createButton(section, ("%s [%s]"):format(viewConfig.label or viewId, if enabled then "ON" else "OFF"), function()
 			executeViewToggle(viewId, not enabled)
 		end, {
 			backgroundColor3 = if enabled then Color3.fromRGB(52, 88, 62) else Color3.fromRGB(54, 66, 84),
@@ -325,20 +223,26 @@ local function renderState(nextState)
 		return
 	end
 
-	clearContainer(refs.scrollContent)
+	DebugMenuUi.clearContainer(refs.scrollContent)
 
 	if currentState.available ~= true then
-		createTextLabel(refs.scrollContent, "Debug unavailable", 20, 15, Color3.fromRGB(200, 180, 180))
+		DebugMenuUi.createTextLabel(refs.scrollContent, "Debug unavailable", {
+			height = 20,
+			textSize = 15,
+			color = Color3.fromRGB(200, 180, 180),
+		})
 		updateCanvasSize()
 		return
 	end
 
-	createTextLabel(
+	DebugMenuUi.createTextLabel(
 		refs.scrollContent,
 		("Place: %s"):format(currentState.place or "-"),
-		18,
-		14,
-		Color3.fromRGB(200, 200, 200)
+		{
+			height = 18,
+			textSize = 14,
+			color = Color3.fromRGB(200, 200, 200),
+		}
 	)
 
 	renderPetSection(refs.scrollContent, currentState)
@@ -370,9 +274,7 @@ local function createUi()
 	toggleButton.Text = "Debug"
 	toggleButton.Parent = gui
 
-	local buttonCorner = Instance.new("UICorner")
-	buttonCorner.CornerRadius = UDim.new(0, 8)
-	buttonCorner.Parent = toggleButton
+	DebugMenuUi.applyCorner(toggleButton, 8)
 
 	local panel = Instance.new("Frame")
 	panel.Name = "Panel"
@@ -384,9 +286,7 @@ local function createUi()
 	panel.Visible = false
 	panel.Parent = gui
 
-	local panelCorner = Instance.new("UICorner")
-	panelCorner.CornerRadius = UDim.new(0, 10)
-	panelCorner.Parent = panel
+	DebugMenuUi.applyCorner(panel, 10)
 
 	local header = Instance.new("TextLabel")
 	header.BackgroundTransparency = 1

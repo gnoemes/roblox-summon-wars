@@ -80,10 +80,33 @@ local function createPlaceholderModel(viewState)
 end
 
 local function buildSignature(viewState)
+	local function serializeValue(value)
+		local valueType = type(value)
+		if valueType == "table" then
+			local keys = {}
+			for key in pairs(value) do
+				table.insert(keys, key)
+			end
+			table.sort(keys, function(a, b)
+				return tostring(a) < tostring(b)
+			end)
+
+			local parts = {}
+			for _, key in ipairs(keys) do
+				table.insert(parts, ("%s=%s"):format(tostring(key), serializeValue(value[key])))
+			end
+			return ("{%s}"):format(table.concat(parts, ","))
+		end
+
+		return tostring(value)
+	end
+
 	return table.concat({
 		tostring(viewState.definitionId),
 		tostring(viewState.scalePresetId),
 		tostring(viewState.displayName),
+		serializeValue(viewState.visualMutations),
+		serializeValue(viewState.cosmetics),
 	}, "|")
 end
 
