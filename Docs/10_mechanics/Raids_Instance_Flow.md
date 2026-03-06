@@ -62,3 +62,26 @@
 
 ## Marionette trigger (Wave Arena)
 Если у питомца есть мутация **Marionette**, то назначение тактического skill происходит **после достижения milestone 25% волн** (см. `Mutations_System.md`).
+
+---
+
+## Content structure overlay (обновлено 2026-03-06)
+
+### Выбор рейда
+Рекомендуемая формула:
+
+**Biome → Tier → Difficulty → Active Modifiers → Encounter Triggers**
+
+### MVP-рамка
+- 1 Raid place
+- 3 биома: Луга / Лес / Пещеры
+- 5 tier'ов как основная PvE-прогрессия
+- 2 сложности: Normal / Hard
+
+### Важно
+- Biome задаёт тему контента и тип угроз, а не просто множитель статов.
+- Tier задаёт длину, budget, элитность и trigger-плотность рейда.
+- Difficulty задаёт scalar-слой, reward multiplier и число модификаторов.
+- `% зачистки` для trigger'ов считается по **budget-based** системе.
+
+Подробности см. `Raid_Content_Structure.md`.
