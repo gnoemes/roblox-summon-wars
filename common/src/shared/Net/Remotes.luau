@@ -6,6 +6,11 @@ local Remotes = {
 	ReturnToHub = "ReturnToHub",
 	ClearRaidSummary = "ClearRaidSummary",
 	PartyDebug = "PartyDebug",
+	PetDebug = "PetDebug",
+	GetHubPetViewStates = "GetHubPetViewStates",
+	HubPetViewStateUpdated = "HubPetViewStateUpdated",
+	GetRaidPetViewStates = "GetRaidPetViewStates",
+	RaidPetViewStateUpdated = "RaidPetViewStateUpdated",
 }
 
 local function getFolder(create: boolean)

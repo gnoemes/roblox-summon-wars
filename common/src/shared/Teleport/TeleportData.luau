@@ -17,6 +17,7 @@ function TeleportData.build(params)
 		partyUserIds = params.partyUserIds,
 		hubPlaceId = params.hubPlaceId,
 		raidPlaceId = params.raidPlaceId,
+		activePets = params.activePets,
 	}
 end
 
@@ -52,6 +53,9 @@ function TeleportData.validate(data, places)
 	end
 	if type(data.partyUserIds) ~= "table" then
 		return false, "MissingParty"
+	end
+	if data.activePets ~= nil and type(data.activePets) ~= "table" then
+		return false, "InvalidActivePets"
 	end
 	if data.hubPlaceId ~= places.Hub then
 		return false, "InvalidHubPlace"

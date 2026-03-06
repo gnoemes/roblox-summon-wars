@@ -9,6 +9,9 @@ local TeleportData = require(Shared:WaitForChild("Teleport"):WaitForChild("Telep
 local RewardsService = require(
 	script.Parent.Parent:WaitForChild("Rewards"):WaitForChild("RewardsService")
 )
+local PetService = require(
+	game:GetService("ServerScriptService"):WaitForChild("ServerShared"):WaitForChild("Features"):WaitForChild("Pets"):WaitForChild("PetService")
+)
 
 local RaidTeleportService = {}
 
@@ -17,6 +20,8 @@ local function validateJoin(player)
 	local teleportData = joinData and joinData.TeleportData
 
 	if RunService:IsStudio() and teleportData == nil then
+		PetService.ensureActivePetProfile(player)
+		RewardsService.grantTestRewards(player)
 		return true
 	end
 
@@ -34,6 +39,16 @@ local function validateJoin(player)
 	end
 	if not inParty then
 		return false, "PlayerNotInParty"
+	end
+
+	local activePets = teleportData.activePets
+	if type(activePets) == "table" and type(activePets[player.UserId]) == "table" then
+		local okSet, errors = PetService.setActivePetProfile(player, activePets[player.UserId])
+		if not okSet then
+			return false, if type(errors) == "table" then table.concat(errors, "; ") else "InvalidPetProfile"
+		end
+	else
+		PetService.ensureActivePetProfile(player)
 	end
 
 	RewardsService.grantTestRewards(player)

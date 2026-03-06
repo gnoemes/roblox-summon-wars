@@ -10,10 +10,24 @@ local TravelBuilder = require(Shared:WaitForChild("Features"):WaitForChild("Trav
 local PartyService = require(
 	script.Parent.Parent:WaitForChild("Party"):WaitForChild("PartyService")
 )
+local PetService = require(
+	game:GetService("ServerScriptService"):WaitForChild("ServerShared"):WaitForChild("Features"):WaitForChild("Pets"):WaitForChild("PetService")
+)
 
 local HubTeleportService = {}
 
 local teleporting = {}
+
+local function buildActivePetsPayload(partyMembers)
+	local activePets = {}
+
+	for _, member in ipairs(partyMembers) do
+		local profile = PetService.ensureActivePetProfile(member)
+		activePets[member.UserId] = profile
+	end
+
+	return activePets
+end
 
 local function requestRaid(player)
 	if not player or not player.Parent then
@@ -36,11 +50,12 @@ local function requestRaid(player)
 
 	local ok, result = pcall(function()
 		local accessCode = TeleportService:ReserveServer(Places.Raid)
+		local party = PartyService.getPartyMembers(player)
 		local teleportData, sessionId = TravelBuilder.buildHubToRaid({
 			requestedByUserId = player.UserId,
 			partyUserIds = PartyService.getPartyUserIds(player),
+			activePets = buildActivePetsPayload(party),
 		})
-		local party = PartyService.getPartyMembers(player)
 
 		local options = Instance.new("TeleportOptions")
 		options.ReservedServerAccessCode = accessCode

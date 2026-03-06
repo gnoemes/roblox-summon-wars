@@ -19,9 +19,13 @@ local RaidTeleportService = require(
 local RaidReturnService = require(
 	script.Parent:WaitForChild("Features"):WaitForChild("Travel"):WaitForChild("RaidReturnService")
 )
+local RaidPetPresenceService = require(
+	script.Parent:WaitForChild("Features"):WaitForChild("Pets"):WaitForChild("RaidPetPresenceService")
+)
 
 RaidTeleportService.init()
 RaidReturnService.init()
+RaidPetPresenceService.init()
 
 local world = ECS.createWorld()
 local events = {

@@ -6,6 +6,7 @@
       "$ignoreUnknownInstances": true,
       "Shared": { "$path": "../../common/src/shared" },
       "Packages": { "$path": "../../Packages" },
+      "PetModels": { "$path": "../../assets/pets" }
     },
     "ServerScriptService": {
       "$path": "src/server",

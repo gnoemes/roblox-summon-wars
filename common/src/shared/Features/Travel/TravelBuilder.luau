@@ -34,6 +34,7 @@ function TravelBuilder.buildHubToRaid(params)
 		partyUserIds = partyUserIds,
 		hubPlaceId = Places.Hub,
 		raidPlaceId = Places.Raid,
+		activePets = params.activePets,
 	}), sessionId
 end
 
