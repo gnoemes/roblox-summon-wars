@@ -77,3 +77,22 @@ Monetization:
 ### Расходники / revive (если есть)
 - `combat_consumable_used` (slot, itemId)
 - `combat_revive_used` (source=freeDaily|paid|token)
+
+---
+
+## Mutations / Genetics events (обновлено 2026-02-27)
+
+### Genome Capacity
+- `genome_capacity_inherited` (parentA, parentB, childCap)
+- `genome_capacity_cap_reached` (cap)
+
+### Mutations (equip/active set)
+- `combat_mutation_set_changed` (usedCapacity, maxCapacity)
+- `visual_mutation_changed` (channel, mutationId)
+
+### Marionette
+- `marionette_tactical_assigned` (skillId, eligibleCount, atMilestone=25)
+- `marionette_tactical_longpress_auto` (skillId)
+
+### Fusion
+- `mutation_fusion_performed` (recipeId, type=visual|combat|cross, deltaCapacity)

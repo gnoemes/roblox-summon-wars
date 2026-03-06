@@ -221,6 +221,19 @@ CP ограничивает “ручной контроль”, чтобы:
 
 ---
 
+
+---
+
+## Tactical skills (через мутации)
+
+### Marionette (Mutations System)
+Если активна мутация **Marionette**, то в Wave Arena после достижения milestone **25% волн** один случайный skill из пула `TacticalEligible` становится **Tactical**:
+- появляется ручная индикация,
+- **long-press** по кнопке переводит этот skill в **Auto** до конца рейда.
+
+Детали см. `Mutations_System.md` (раздел Marionette).
+
+
 ## 11) MVP vs Post-MVP
 
 ### MVP
