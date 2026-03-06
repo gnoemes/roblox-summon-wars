@@ -1,10 +1,14 @@
 local Players = game:GetService("Players")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local PetIdentity = require(script.Parent.Parent:WaitForChild("Components"):WaitForChild("PetIdentity"))
 local PetOwner = require(script.Parent.Parent:WaitForChild("Components"):WaitForChild("PetOwner"))
 local SkillLoadout = require(script.Parent.Parent:WaitForChild("Components"):WaitForChild("SkillLoadout"))
 local SkillCooldowns = require(script.Parent.Parent:WaitForChild("Components"):WaitForChild("SkillCooldowns"))
 local SkillRuntimeState = require(script.Parent.Parent:WaitForChild("Components"):WaitForChild("SkillRuntimeState"))
+local DebugService = require(
+	ServerScriptService:WaitForChild("ServerShared"):WaitForChild("Features"):WaitForChild("Debug"):WaitForChild("DebugService")
+)
 
 local function findLastActivatedSkill(lastActivatedAtBySkillId)
 	local lastSkillId = nil
@@ -43,6 +47,13 @@ local function PetDebugSummarySystem(world)
 	do
 		local player = Players:GetPlayerByUserId(owner.userId)
 		if player then
+			if not DebugService.isViewEnabled(player, "raid_pet_runtime") then
+				if player:GetAttribute("RaidPetDebugSummary") ~= nil then
+					player:SetAttribute("RaidPetDebugSummary", nil)
+				end
+				continue
+			end
+
 			local summary = buildSummary(identity, loadout, cooldowns, runtimeState)
 			local pipelineStatus = player:GetAttribute("RaidPetPipelineStatus")
 			if type(pipelineStatus) == "string" and pipelineStatus ~= "" then

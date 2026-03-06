@@ -22,10 +22,14 @@ local RaidReturnService = require(
 local RaidPetPresenceService = require(
 	script.Parent:WaitForChild("Features"):WaitForChild("Pets"):WaitForChild("RaidPetPresenceService")
 )
+local DebugBootstrap = require(
+	script.Parent:WaitForChild("Features"):WaitForChild("Debug"):WaitForChild("DebugBootstrap")
+)
 
 RaidTeleportService.init()
 RaidReturnService.init()
 RaidPetPresenceService.init()
+DebugBootstrap.init()
 
 local world = ECS.createWorld()
 local events = {

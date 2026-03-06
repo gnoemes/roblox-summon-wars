@@ -46,6 +46,19 @@ function RewardsService.grantTestRewards(player)
 	return rewards
 end
 
+function RewardsService.grantRewards(player, grantedRewards)
+	local nextRewards = RewardLedger.get(player.UserId) or buildEmptyRewards()
+
+	for rewardId, amount in pairs(grantedRewards or {}) do
+		if nextRewards[rewardId] ~= nil and type(amount) == "number" then
+			nextRewards[rewardId] += amount
+		end
+	end
+
+	RewardLedger.set(player.UserId, nextRewards)
+	return nextRewards
+end
+
 function RewardsService.getRewardsForReturn(player)
 	return RewardLedger.get(player.UserId)
 end

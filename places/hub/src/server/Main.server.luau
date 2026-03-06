@@ -22,10 +22,14 @@ local HubReturnService = require(
 local HubPetPresenceService = require(
 	script.Parent:WaitForChild("Features"):WaitForChild("Pets"):WaitForChild("HubPetPresenceService")
 )
+local DebugBootstrap = require(
+	script.Parent:WaitForChild("Features"):WaitForChild("Debug"):WaitForChild("DebugBootstrap")
+)
 
 HubTeleportService.init()
 HubReturnService.init()
 HubPetPresenceService.init()
+DebugBootstrap.init()
 
 local world = ECS.createWorld()
 local events = {
