@@ -217,7 +217,7 @@ RXP начисляется как сумма:
 
 ### 11.1 Ресурсы бестиария
 - `Samples_Common`, `Samples_Rare`, `Samples_Boss`
-- `DNA_Fragments` (если используется в бридинге)
+- `Genome` (если используется в бридинге)
 - `Catalysts_Deterministic` (только детерминированные)
 
 ### 11.2 Sink’и

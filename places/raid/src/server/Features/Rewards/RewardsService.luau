@@ -2,6 +2,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local RewardConfig = require(Shared:WaitForChild("Config"):WaitForChild("Rewards"))
+local RewardProfiles = require(
+	Shared:WaitForChild("Config"):WaitForChild("Economy"):WaitForChild("RewardProfiles")
+)
 local RewardLedger = require(script.Parent:WaitForChild("RewardLedger"))
 
 local RewardsService = {}
@@ -14,15 +17,30 @@ local function buildEmptyRewards()
 	return rewards
 end
 
+local function buildRewardsFromProfile(profileId)
+	local profile = RewardProfiles.Profiles[profileId]
+	local rewards = buildEmptyRewards()
+
+	if not profile then
+		warn("Missing reward profile:", profileId)
+		return rewards
+	end
+
+	for rewardId, amount in pairs(profile.rewards) do
+		if rewards[rewardId] ~= nil then
+			rewards[rewardId] = amount
+		end
+	end
+
+	return rewards
+end
+
 function RewardsService.grantTestRewards(player)
 	if RewardLedger.has(player.UserId) then
 		return RewardLedger.get(player.UserId)
 	end
 
-	local rewards = buildEmptyRewards()
-	rewards.credits = 100
-	rewards.biomass = 10
-	rewards.dna = 3
+	local rewards = buildRewardsFromProfile(RewardProfiles.DefaultRaidProfileId)
 
 	RewardLedger.set(player.UserId, rewards)
 	return rewards
