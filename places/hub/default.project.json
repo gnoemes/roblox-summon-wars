@@ -1,5 +1,5 @@
 {
-  "name": "Game Template",
+  "name": "Anime Summon Wars",
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
