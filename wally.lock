@@ -3,7 +3,7 @@
 registry = "test"
 
 [[package]]
-name = "dany/game"
+name = "dany/summonWars"
 version = "0.1.0"
 dependencies = [["Matter", "matter-ecs/matter@0.8.5"]]
 

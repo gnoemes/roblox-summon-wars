@@ -1,16 +1,23 @@
-﻿# Roblox Game Template
+﻿# Roblox Game: Anime Summon Wars
 
 ## Business Logic
 
-> Fill this section after cloning the template for a specific game.
-
-- **Game name:** TBD
-- **Genre:** TBD
-- **Description:** TBD
-- **Core loop:** TBD
-- **Audience:** TBD
-- **Key features:** TBD
-
+- **Game name:** Anime Summon Wars *(working title)*
+- **Genre:** Social anime-style squad battler / auto-battle progression RPG
+- **Description:** Roblox-игра про сбор и усиление отряда из 3 бойцов, где игрок фармит врагов на своем battle stand, открывает карты, улучшает состав, проходит Dungeons и позже Raids, постепенно раскрывая новые системы прогрессии через guided progression.
+- **Core loop:** Открыть/усилить бойцов → собрать трио → выбрать цель на споте → смотреть auto-battle и получать награды → конвертировать награды в силу через leveling / Fusion / craft / prep → пройти более сложный контент → открыть следующий слой прогрессии.
+- **Audience:** Игроки Roblox, которым нравятся anime-inspired игры, collection/progression loops, быстрый дофаминовый рост силы, idle/auto-battle формат и социальное сравнение с другими игроками.
+- **Key features:**
+    - battle stand / combat spot как основной игровой shell
+    - отряд из **3 бойцов**
+    - **target-click auto-combat**
+    - карты бойцов и сбор ростера
+    - сильная прогрессия через **levels, milestones, Fusion**
+    - **Regional Progression** как главный meta-layer
+    - **Hunting Grounds, Dungeon, Raid**
+    - **guided reveal**: Recommended / Tasks / reactive prompts
+    - social/stat board на споте
+    - быстрые power spikes, большие цифры, акцент на attack speed и feel growth
 ---
 
 ## Technical Overview
