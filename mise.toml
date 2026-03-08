@@ -4,17 +4,5 @@
 stylua = "2.3.1"
 "github:Kampfkarren/selene" = "0.30.0"
 
-[tasks.serve-hub]
-run = "rojo serve places/hub/default.project.json"
-
-[tasks.serve-raid]
-run = "rojo serve places/raid/default.project.json"
-
-[tasks.sourcemap-hub]
-run = "rojo sourcemap --watch places/hub/default.project.json --output .dev/sourcemap.hub.json"
-
-[tasks.sourcemap-raid]
-run = "rojo sourcemap --watch places/raid/default.project.json --output .dev/sourcemap.raid.json"
-
 [tasks.deps]
 run = "wally install"

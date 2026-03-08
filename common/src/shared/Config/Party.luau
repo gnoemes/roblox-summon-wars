@@ -1,3 +1,0 @@
-return {
-	MaxPartySize = 4,
-}

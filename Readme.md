@@ -1,144 +1,203 @@
-﻿# IncubatorZero — Dev Scripts (Rojo/Wally/Luau)
+﻿# Roblox Game Template
 
-Этот репозиторий использует файловый воркфлоу (IDE → файлы → Rojo → Roblox Studio), а не редактирование кода внутри Studio.
+## Business Logic
 
-Ниже описаны скрипты в `./tools`, их назначение и когда их запускать.
+> Fill this section after cloning the template for a specific game.
 
----
-
-## Основные скрипты
-
-### 1) `tools/Dev.ps1` — управление дев-сессией (start/stop/restart/status)
-
-**Что делает:**
-- Это **единый управляющий скрипт**, который запускает и контролирует все дев-процессы.
-- Команда **`start`**:
-  - поднимает **Rojo serve** для live-синка проекта в Roblox Studio;
-  - поднимает **Rojo sourcemap --watch** для генерации/обновления `.dev/sourcemap.{place}.json` (нужно для Luau LSP/IDE);
-  - пишет логи в `.dev/logs/`;
-  - сохраняет состояние/процессы в `.dev/state.{place}.json`;
-  - **не завершается сам** — остаётся “живым” процессом (чтобы IDE могла считать его запущенным и останавливать кнопкой Stop).
-- Команда **`stop`**:
-  - останавливает процессы дев-сессии по сохранённому state;
-  - дополнительно освобождает порт Rojo (страховка от “висяков”).
-- Команда **`restart`**:
-  - делает stop → start одним действием.
-- Команда **`status`**:
-  - показывает, какие процессы подняты и живы ли они.
-
-**Когда вызывать:**
-- **`start`** — каждый раз в начале рабочей сессии, когда хочешь проверять код в Roblox Studio.
-- **`stop`** — в конце сессии или если нужно гарантированно освободить порт/ресурсы.
-- **`restart`** — когда хочешь быстро перезапустить Rojo/sourcemap (например, после правок `default.project.json`, смены структуры, или если Rojo/Studio “залипли”).
-- **`status`** — когда непонятно, запущена ли сессия и какие процессы реально живы.
-
-**Как использовать (основной сценарий):**
-1) Запусти `tools/Dev.ps1 start -Place hub` или `tools/Dev.ps1 start -Place raid` (лучше как Run Configuration в IDE).
-2) Открой Roblox Studio → Rojo plugin → **Connect**.
-3) Редактируй код в IDE → проверяй через Play/Stop в Studio.
-4) Для завершения:
-  - нажми **Stop** в IDE (скрипт корректно остановит дочерние процессы),
-  - или выполни `tools/Dev.ps1 stop`.
-
-**Примечание:**
-- Если тебе нужно “быстро перезапустить” — используй `tools/Dev.ps1 restart -Place hub|raid` вместо ручного stop/start.
+- **Game name:** TBD
+- **Genre:** TBD
+- **Description:** TBD
+- **Core loop:** TBD
+- **Audience:** TBD
+- **Key features:** TBD
 
 ---
 
-### 2) `tools/Check.ps1` — проверка перед коммитом (format + lint + build)
-**Что делает:**
-- Запускает форматирование (через `Fmt.ps1`).
-- Запускает линт (через `Lint.ps1`).
-- Делает `rojo build` в `.dev/build.rbxm` (быстрая проверка, что проект валиден и собирается).
+## Technical Overview
 
-**Когда вызывать:**
-- Перед каждым коммитом/пушем.
-- Перед тем как просить ревью/сливать изменения.
-- После крупных изменений структуры/зависимостей, чтобы убедиться, что проект не сломан.
+This template already includes:
 
----
+- Rojo
+- Wally
+- Matter
+- Selene
+- StyLua
+- mise
+- PowerShell scripts in `tools/`
+- multi-place support
+- `AGENTS.md` for agent workflow
 
-## Дополнительные скрипты
+## Project Structure
 
-### `tools/Deps.ps1` — установка/обновление зависимостей (Wally)
-**Что делает:**
-- Выполняет `mise install` (ставит инструменты из `mise.toml`).
-- Выполняет `wally install` (обновляет папку `Packages/`).
+```text
+mise.toml
+wally.toml
+wally.lock
+selene.toml
+.stylua.toml
 
-**Когда вызывать:**
-- Когда изменил `wally.toml` или `wally.lock`.
-- После `git pull`, если в репозитории изменились зависимости.
-- Если папка `Packages/` отсутствует или повреждена.
+common/
+  src/
+    shared/        # pure logic/data/protocols/utils
+    server/        # shared server code
+    client/        # shared client code
 
----
+places/
+  hub/
+    default.project.json
+    src/
+      server/
+      client/
 
-### `tools/Fmt.ps1` — форматирование кода (StyLua)
-**Что делает:**
-- Запускает `stylua` по исходникам (обычно `places/*/src` и `common/src`).
+  raid/
+    default.project.json
+    src/
+      server/
+      client/
+```
 
-**Когда вызывать:**
-- Перед коммитом (обычно через `Check.ps1`).
-- После больших правок, чтобы привести код к единому стилю.
+## After Cloning the Template
 
-**Зависит от:**
-- `.stylua.toml` в корне проекта (правила форматирования).
+### 1. Change git origin
 
----
+```bash
+git remote remove origin
+git remote add origin <NEW_REPO_URL>
+git branch -M main
+git push -u origin main
+```
 
-### `tools/Lint.ps1` — статический анализ (Selene)
-**Что делает:**
-- Запускает `selene` по исходникам (обычно `places/*/src` и `common/src`).
+### 2. Change place name in Hub config
 
-**Когда вызывать:**
-- Перед коммитом (обычно через `Check.ps1`).
-- Когда хочется поймать ошибки раннее (неиспользуемые переменные, опечатки, подозрительные конструкции).
+File:
 
-**Зависит от:**
-- `selene.toml` в корне проекта.
+```text
+places/hub/default.project.json
+```
 
----
+Replace the `name` field with the new project/place name.
 
-### `tools/TailLogs.ps1` — просмотр логов дев-процессов
-**Что делает:**
-- Показывает/подписывается на логи из `.dev/logs/` (полезно, если Rojo/LSP что-то ругается).
+### 3. Change package name in `wally.toml`
 
-**Когда вызывать:**
-- Если `DevStart.ps1` отработал, но Rojo/сourcemap не поднялись.
-- Если в Studio не коннектится Rojo plugin или синк не работает.
+Update:
 
----
+```toml
+name = "yourname/your-game"
+```
 
-## Рекомендованный ежедневный флоу
+### 4. Create an IDEA Run Configuration
 
-### Начало сессии
-1) (Опционально) `tools/Deps.ps1` — если были изменения в зависимостях или после `git pull`.
-2) `tools/Dev.ps1 start -Place hub` (или `-Place raid`)
-3) Roblox Studio → Rojo plugin → Connect
-4) Разработка в IDE → Play/Stop в Studio для проверки.
+Script:
 
-### Перед коммитом
-1) `tools/Check.ps1`
-2) `git commit` / `git push`
+```text
+tools/Dev.ps1
+```
 
-### Конец сессии
-1) `tools/Dev.ps1 stop -Place hub` (или `-Place raid`)
+Arguments example:
 
----
+```powershell
+-Command start -Place hub -Port 34872
+```
 
-## Где что хранится
+## Quick Start
 
-- Исходники:
-  - `places/hub/src`
-  - `places/raid/src`
-  - `common/src` (общий код для обоих places)
-- Зависимости (генерируется): `Packages/` *(не коммитится)*
-- Sourcemap (генерируется): `.dev/sourcemap.{place}.json` *(не коммитится)*
-- Артефакты и логи (генерируется): `.dev/` *(не коммитится)*
-- Конфиги:
-  - `places/hub/default.project.json` — Rojo project (Hub)
-  - `places/raid/default.project.json` — Rojo project (Raid)
-  - `wally.toml` / `wally.lock` — зависимости
-  - `.stylua.toml` — правила форматирования
-  - `selene.toml` — правила линтинга
+Install tools:
 
----
+```bash
+mise install
+```
+
+Install dependencies:
+
+```bash
+wally install
+```
+
+Start dev session:
+
+```powershell
+./tools/Dev.ps1 start -Place hub -Port 34872
+```
+
+Then open Roblox Studio and connect through Rojo.
+
+## Multi-place
+
+To add a new place:
+
+1. Create a new folder in `places/`
+2. Add `default.project.json`
+3. Add `src/server` and `src/client`
+4. Run `tools/Dev.ps1` with the new place name
+
+Example:
+
+```text
+places/
+  arena/
+    default.project.json
+    src/
+      server/
+      client/
+```
+
+## Main Scripts
+
+### `tools/Dev.ps1`
+Controls local dev session:
+- starts `rojo serve`
+- starts sourcemap watcher
+- writes logs to `.dev/`
+- supports `start / stop / restart / status`
+
+### `tools/Deps.ps1`
+Runs:
+
+```powershell
+mise install
+wally install
+```
+
+### `tools/Fmt.ps1`
+Runs StyLua formatting.
+
+### `tools/Lint.ps1`
+Runs Selene linting.
+
+### `tools/Check.ps1`
+Runs format + lint + validation/build.
+
+### `tools/TailLogs.ps1`
+Shows dev logs from `.dev/logs/`.
+
+## Recommended Workflow
+
+### Start session
+
+```powershell
+./tools/Deps.ps1
+./tools/Dev.ps1 start -Place hub -Port 34872
+```
+
+### Before commit
+
+```powershell
+./tools/Check.ps1
+```
+
+### End session
+
+```powershell
+./tools/Dev.ps1 stop -Place hub
+```
+
+## Checklist
+
+- [ ] Change `git origin`
+- [ ] Update `places/hub/default.project.json`
+- [ ] Update `wally.toml`
+- [ ] Create IDEA Run Configuration for `tools/Dev.ps1`
+- [ ] Run `mise install`
+- [ ] Run `wally install`
+- [ ] Start `tools/Dev.ps1`
+- [ ] Connect Rojo in Roblox Studio
