@@ -21,6 +21,9 @@ export type SkillDefinition = {
 	targetKind: string,
 	triggerKind: string,
 	cooldownSeconds: number?,
+	damageMultiplier: number,
+	healMultiplier: number,
+	statusApplyChance: number,
 	appliedStatusIds: { string },
 	flags: SkillFlags,
 }
@@ -69,6 +72,22 @@ function SkillDefinition.assert(value, fieldName)
 		value.cooldownSeconds,
 		string.format("%s.cooldownSeconds", fieldName)
 	)
+	Contract.assertNonNegativeNumber(
+		value.damageMultiplier,
+		string.format("%s.damageMultiplier", fieldName)
+	)
+	Contract.assertNonNegativeNumber(
+		value.healMultiplier,
+		string.format("%s.healMultiplier", fieldName)
+	)
+	Contract.assertNonNegativeNumber(
+		value.statusApplyChance,
+		string.format("%s.statusApplyChance", fieldName)
+	)
+	assert(
+		value.statusApplyChance <= 1,
+		string.format("%s.statusApplyChance must be <= 1", fieldName)
+	)
 	assertStatusIds(value.appliedStatusIds, string.format("%s.appliedStatusIds", fieldName))
 	assertFlags(value.flags, string.format("%s.flags", fieldName))
 
@@ -84,6 +103,10 @@ function SkillDefinition.assert(value, fieldName)
 		assert(
 			not value.flags.isSpecialSkill,
 			string.format("%s basic attacks cannot be special skills", fieldName)
+		)
+		assert(
+			#value.appliedStatusIds == 0,
+			string.format("%s basic attacks should not define built-in statuses", fieldName)
 		)
 	end
 

@@ -182,3 +182,13 @@
 - Форматирование, линт и build-check должны идти через `tools/Fmt.ps1`, `tools/Lint.ps1`, `tools/Check.ps1`.
 - Эти скрипты должны работать с multi-place структурой (`common/src` + `places/*/src`), а не ожидать плоский `src/`.
 - Если tooling начинает расходиться с реальной структурой репозитория, исправляй tooling, а не обходи проблему локальными костылями.
+
+### 6.9 Combat content contracts
+- Боевой контент хранится data-driven:
+  - class packages в `common/src/shared/Config/Combat/Fighters/Classes/*`
+  - общие skill/drop definitions в `common/src/shared/Config/Combat/Common/*`
+  - региональный контент в `common/src/shared/Config/Combat/Regions/<Region>/*`
+- Class package должен описывать `class` и `skillPool`, а не назначать конкретный активный скилл бойцу.
+- Fighter business model / snapshot должен хранить отдельно экипированные активные скиллы через `activeSkillIds`.
+- Если позже появятся rolled/owned skill pools у конкретного бойца, они должны жить в persistent/session model, а не в ECS-компонентах.
+- ECS/runtime combat state должен получать только реально активные способности, cooldowns и другой live state, нужный симуляции.

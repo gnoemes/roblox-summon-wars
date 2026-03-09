@@ -13,6 +13,7 @@ export type StatusDefinition = {
 	statusId: string,
 	displayName: string,
 	kind: string,
+	baseDurationSeconds: number,
 	tickIntervalSeconds: number?,
 	maxStacks: number,
 	flags: StatusFlags,
@@ -38,6 +39,10 @@ function StatusDefinition.assert(value, fieldName)
 	Contract.assertString(value.statusId, string.format("%s.statusId", fieldName))
 	Contract.assertString(value.displayName, string.format("%s.displayName", fieldName))
 	Contract.assertEnumValue(value.kind, StatusKinds, string.format("%s.kind", fieldName))
+	Contract.assertPositiveNumber(
+		value.baseDurationSeconds,
+		string.format("%s.baseDurationSeconds", fieldName)
+	)
 	Contract.assertOptionalPositiveNumber(
 		value.tickIntervalSeconds,
 		string.format("%s.tickIntervalSeconds", fieldName)

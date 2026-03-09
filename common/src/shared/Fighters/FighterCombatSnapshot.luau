@@ -12,7 +12,7 @@ export type FighterCombatSnapshot = {
 	level: number,
 	baseStats: BaseCombatStats.BaseCombatStats,
 	computedStats: ComputedCombatStats.ComputedCombatStats,
-	skillId: string,
+	activeSkillIds: { string },
 	traitId: string?,
 }
 
@@ -28,7 +28,7 @@ function FighterCombatSnapshot.assert(value, fieldName)
 	Contract.assertPositiveInteger(value.level, string.format("%s.level", fieldName))
 	BaseCombatStats.assert(value.baseStats, string.format("%s.baseStats", fieldName))
 	ComputedCombatStats.assert(value.computedStats, string.format("%s.computedStats", fieldName))
-	Contract.assertString(value.skillId, string.format("%s.skillId", fieldName))
+	Contract.assertStringArray(value.activeSkillIds, string.format("%s.activeSkillIds", fieldName))
 	Contract.assertOptionalString(value.traitId, string.format("%s.traitId", fieldName))
 
 	return value
