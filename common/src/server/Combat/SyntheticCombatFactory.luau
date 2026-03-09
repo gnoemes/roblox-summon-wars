@@ -43,14 +43,22 @@ function SyntheticCombatFactory.createRun(player, extractionType, enemyId)
 	local runInstanceId = string.format("Run:%d:%s", player.UserId, extractionType)
 	local fighterSnapshots = {}
 	local baseFighterStatesByCombatantId = {}
+	local fighterMetadataByCombatantId = {}
 
 	for _, spec in ipairs(SyntheticScenarioPresets.DefaultFighterTrio) do
 		local snapshot = CombatStatsBuilder.buildFighterSnapshot(spec)
+		local classDefinition = ClassDefinitions.get(snapshot.classId)
 		table.insert(fighterSnapshots, snapshot)
 		baseFighterStatesByCombatantId[snapshot.combatantId] = {
 			combatantId = snapshot.combatantId,
 			maxHp = snapshot.computedStats.hp,
 			currentHp = snapshot.computedStats.hp,
+		}
+		fighterMetadataByCombatantId[snapshot.combatantId] = {
+			combatantId = snapshot.combatantId,
+			displayName = classDefinition.displayName,
+			classId = snapshot.classId,
+			grade = snapshot.grade,
 		}
 	end
 
@@ -64,6 +72,7 @@ function SyntheticCombatFactory.createRun(player, extractionType, enemyId)
 		extractionType = extractionType,
 		enemyId = enemyDefinition.enemyId,
 		fighterSnapshots = fighterSnapshots,
+		fighterMetadataByCombatantId = deepClone(fighterMetadataByCombatantId),
 		baseFighterStatesByCombatantId = deepClone(baseFighterStatesByCombatantId),
 		persistentFighterStatesByCombatantId = deepClone(baseFighterStatesByCombatantId),
 		encounterIndex = 0,

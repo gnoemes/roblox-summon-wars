@@ -194,4 +194,10 @@
 - Если позже появятся rolled/owned skill pools у конкретного бойца, они должны жить в persistent/session model, а не в ECS-компонентах.
 - ECS/runtime combat state должен получать только реально активные способности, cooldowns и другой live state, нужный симуляции.
 
+### 6.10 Grade metadata
+- Shared grade metadata lives in `common/src/shared/Progression/Grades/*`.
+- `GradeDefinitions` — единый источник для grade id, display name, sort order и цвета; не дублируй эти базовые вещи по UI/config слоям.
+- System-specific rules for grades должны жить отдельно: например fighter combat scaling в `common/src/shared/Config/Combat/Fighters/GradeModifiers.luau`, а не внутри общего grade registry.
+- Enemy tiers не должны смешиваться с fighter/resource grades; для врагов держать отдельные tier definitions.
+
 

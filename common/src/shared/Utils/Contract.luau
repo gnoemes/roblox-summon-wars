@@ -40,6 +40,15 @@ function Contract.assertBoolean(value, fieldName)
 	return value
 end
 
+function Contract.assertColor3(value, fieldName)
+	assert(
+		typeof(value) == "Color3",
+		string.format("%s must be a Color3", formatFieldName(fieldName))
+	)
+
+	return value
+end
+
 function Contract.assertNumber(value, fieldName)
 	assert(
 		type(value) == "number",

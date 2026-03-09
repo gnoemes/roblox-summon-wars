@@ -1,4 +1,4 @@
-local GradeIds = require(script.Parent.Parent.Parent.Parent.Fighters.GradeIds)
+local GradeIds = require(script.Parent.Parent.Parent.Parent.Progression.Grades.GradeIds)
 
 local definitions = {
 	Common = table.freeze({

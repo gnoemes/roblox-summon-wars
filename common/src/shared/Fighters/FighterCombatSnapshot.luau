@@ -2,7 +2,7 @@ local Contract = require(script.Parent.Parent.Utils.Contract)
 local BaseCombatStats = require(script.Parent.Parent.Stats.BaseCombatStats)
 local ComputedCombatStats = require(script.Parent.Parent.Stats.ComputedCombatStats)
 local ClassIds = require(script.Parent.ClassIds)
-local GradeIds = require(script.Parent.GradeIds)
+local GradeIds = require(script.Parent.Parent.Progression.Grades.GradeIds)
 
 export type FighterCombatSnapshot = {
 	combatantId: string,

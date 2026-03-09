@@ -231,6 +231,8 @@ function CombatEncounterService:getDebugState(player)
 		activeEncounter = self._world:get(runState.activeEncounterEntityId, Components.Encounter)
 	end
 
+	local fighterMetadataByCombatantId = runState.fighterMetadataByCombatantId or {}
+
 	local liveCombatants = {}
 	if runState.activeEncounterId ~= nil then
 		for _, combatant, stats, abilities, runtime in
@@ -242,10 +244,12 @@ function CombatEncounterService:getDebugState(player)
 			)
 		do
 			if combatant.encounterId == runState.activeEncounterId then
+				local fighterMetadata = fighterMetadataByCombatantId[combatant.combatantId]
 				table.insert(liveCombatants, {
 					combatantId = combatant.combatantId,
 					kind = combatant.kind,
 					displayName = combatant.displayName,
+					grade = if fighterMetadata ~= nil then fighterMetadata.grade else nil,
 					currentHp = runtime.currentHp,
 					maxHp = runtime.maxHp,
 					nextActionAt = runtime.nextActionAt,
@@ -264,6 +268,18 @@ function CombatEncounterService:getDebugState(player)
 		return left.combatantId < right.combatantId
 	end)
 
+	local persistentFighters = {}
+	for combatantId, fighterState in pairs(runState.persistentFighterStatesByCombatantId) do
+		local fighterMetadata = fighterMetadataByCombatantId[combatantId]
+		persistentFighters[combatantId] = {
+			combatantId = combatantId,
+			displayName = if fighterMetadata ~= nil then fighterMetadata.displayName else combatantId,
+			grade = if fighterMetadata ~= nil then fighterMetadata.grade else nil,
+			currentHp = fighterState.currentHp,
+			maxHp = fighterState.maxHp,
+		}
+	end
+
 	return {
 		hasRun = true,
 		runInstanceId = runState.runInstanceId,
@@ -271,7 +287,7 @@ function CombatEncounterService:getDebugState(player)
 		enemyId = runState.enemyId,
 		encounterIndex = runState.encounterIndex,
 		activeEncounterId = runState.activeEncounterId,
-		persistentFighters = clone(runState.persistentFighterStatesByCombatantId),
+		persistentFighters = persistentFighters,
 		activeEncounter = if activeEncounter ~= nil
 			then {
 				encounterId = activeEncounter.encounterId,

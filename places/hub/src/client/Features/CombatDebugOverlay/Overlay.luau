@@ -4,6 +4,9 @@ local RunService = game:GetService("RunService")
 
 local CombatConfig =
 	require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("Combat"))
+local GradeDefinitions = require(
+	ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Progression"):WaitForChild("Grades")
+).GradeDefinitions
 
 local COMBAT_VIEW_KEY = "Combat/SyntheticRun"
 local REFRESH_INTERVAL_SECONDS = 0.35
@@ -56,6 +59,13 @@ local function paint(text, colorHex)
 	return string.format('<font color="%s">%s</font>', colorHex, escapeRichText(text))
 end
 
+local function color3ToRichText(color)
+	local red = math.floor(color.R * 255 + 0.5)
+	local green = math.floor(color.G * 255 + 0.5)
+	local blue = math.floor(color.B * 255 + 0.5)
+	return string.format("rgb(%d,%d,%d)", red, green, blue)
+end
+
 local function sortedStringKeys(map)
 	local keys = {}
 	for key in pairs(map or {}) do
@@ -75,6 +85,15 @@ local function tryGet(registry, definitionId)
 	end
 
 	return nil
+end
+
+local function formatGradeTag(gradeId)
+	local definition = tryGet(GradeDefinitions, gradeId)
+	if definition == nil then
+		return ""
+	end
+
+	return " " .. paint(string.format("[%s]", definition.displayName), color3ToRichText(definition.color))
 end
 
 local function getStatusColor(statusId)
@@ -229,10 +248,12 @@ end
 local function formatCombatantLines(combatant, elapsedTime)
 	local nextIn = math.max((combatant.nextActionAt or 0) - elapsedTime, 0)
 	local displayName = paint(combatant.displayName, getCombatantColor(combatant.kind))
+	local gradeTag = formatGradeTag(combatant.grade)
 	local kind = paint(combatant.kind or "-", RICH_COLORS.Kind)
 	local line1 = string.format(
-		"- %s | %s | HP %.0f/%.0f | next %.2fs | atk %.2fs",
+		"- %s%s | %s | HP %.0f/%.0f | next %.2fs | atk %.2fs",
 		displayName,
+		gradeTag,
 		kind,
 		combatant.currentHp,
 		combatant.maxHp,
@@ -398,12 +419,16 @@ local function buildStateText(state)
 	for _, combatantId in ipairs(persistentIds) do
 		local fighterState = combatView.persistentFighters[combatantId]
 		local label = labelMap[combatantId]
-		local displayName = if label ~= nil then label.displayName else combatantId
+		local displayName = fighterState.displayName
+			or (if label ~= nil then label.displayName else combatantId)
+		local displayNameText = paint(displayName, RICH_COLORS.FighterName)
+		local gradeTag = formatGradeTag(fighterState.grade)
 		table.insert(
 			lines,
 			string.format(
-				"- %s | HP %.0f/%.0f",
-				displayName,
+				"- %s%s | HP %.0f/%.0f",
+				displayNameText,
+				gradeTag,
 				fighterState.currentHp or 0,
 				fighterState.maxHp or 0
 			)
