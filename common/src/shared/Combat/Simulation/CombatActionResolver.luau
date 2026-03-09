@@ -29,11 +29,34 @@ local function buildCombatantRef(combatant)
 	}
 end
 
+local function buildEarlyResult(action, outcome, resolvedAt)
+	return CombatActionResult.new({
+		actionId = action.actionId,
+		sequence = action.sequence,
+		actor = action.actor,
+		target = action.target,
+		actionType = action.actionType,
+		skillId = action.skillId,
+		outcome = outcome,
+		hit = false,
+		damageDealt = 0,
+		healingDone = 0,
+		appliedEffectIds = {},
+		defeatedCombatantIds = {},
+		resolvedAt = resolvedAt,
+	})
+end
+
 function CombatActionResolver.resolveAction(context)
 	local actorState = cloneRuntimeState(context.actor.runtimeState)
-	local targetState = if context.target ~= nil
-		then cloneRuntimeState(context.target.runtimeState)
-		else nil
+	local targetState = nil
+	if context.target ~= nil then
+		if context.target.combatantId == context.actor.combatantId then
+			targetState = actorState
+		else
+			targetState = cloneRuntimeState(context.target.runtimeState)
+		end
+	end
 	local plannedSkill = context.skillDefinition
 	local actionType = if plannedSkill.flags.isBasicAttack then "BasicAttack" else "SpecialSkill"
 	local action = CombatAction.new({
@@ -49,20 +72,7 @@ function CombatActionResolver.resolveAction(context)
 	if actorState.currentHp <= 0 then
 		return {
 			action = action,
-			result = CombatActionResult.new({
-				actionId = action.actionId,
-				sequence = action.sequence,
-				actor = action.actor,
-				target = action.target,
-				actionType = action.actionType,
-				skillId = action.skillId,
-				outcome = "Cancelled",
-				hit = false,
-				damageDealt = 0,
-				appliedEffectIds = {},
-				defeatedCombatantIds = {},
-				resolvedAt = context.now,
-			}),
+			result = buildEarlyResult(action, "Cancelled", context.now),
 			actorState = actorState,
 			targetState = targetState,
 			rngState = context.rngState,
@@ -72,43 +82,21 @@ function CombatActionResolver.resolveAction(context)
 	if CombatStatusEngine.blocksActions(actorState) then
 		return {
 			action = action,
-			result = CombatActionResult.new({
-				actionId = action.actionId,
-				sequence = action.sequence,
-				actor = action.actor,
-				target = action.target,
-				actionType = action.actionType,
-				skillId = action.skillId,
-				outcome = "Blocked",
-				hit = false,
-				damageDealt = 0,
-				appliedEffectIds = {},
-				defeatedCombatantIds = {},
-				resolvedAt = context.now,
-			}),
+			result = buildEarlyResult(action, "Blocked", context.now),
 			actorState = actorState,
 			targetState = targetState,
 			rngState = context.rngState,
 		}
 	end
 
-	if context.target == nil or targetState == nil or targetState.currentHp <= 0 then
+	local requiresTarget = plannedSkill.targetKind ~= "None"
+	if
+		requiresTarget
+		and (context.target == nil or targetState == nil or targetState.currentHp <= 0)
+	then
 		return {
 			action = action,
-			result = CombatActionResult.new({
-				actionId = action.actionId,
-				sequence = action.sequence,
-				actor = action.actor,
-				target = action.target,
-				actionType = action.actionType,
-				skillId = action.skillId,
-				outcome = "Invalid",
-				hit = false,
-				damageDealt = 0,
-				appliedEffectIds = {},
-				defeatedCombatantIds = {},
-				resolvedAt = context.now,
-			}),
+			result = buildEarlyResult(action, "Invalid", context.now),
 			actorState = actorState,
 			targetState = targetState,
 			rngState = context.rngState,
@@ -117,7 +105,7 @@ function CombatActionResolver.resolveAction(context)
 
 	local hitRoll
 	hitRoll, context.rngState = DeterministicRandom.nextFloat(context.rngState)
-	local hitChance = if plannedSkill.flags.canMiss
+	local hitChance = if plannedSkill.flags.canMiss and context.target ~= nil
 		then CombatMath.calculateHitChance(
 			context.actor.computedStats,
 			context.target.computedStats
@@ -126,6 +114,7 @@ function CombatActionResolver.resolveAction(context)
 	local didHit = CombatMath.rollSuccess(hitChance, hitRoll)
 	local didCrit = false
 	local damageDealt = 0
+	local healingDone = 0
 	local appliedEffectIds = {}
 	local defeatedCombatantIds = {}
 
@@ -134,7 +123,7 @@ function CombatActionResolver.resolveAction(context)
 		critRoll, context.rngState = DeterministicRandom.nextFloat(context.rngState)
 		didCrit = plannedSkill.flags.canCrit
 			and CombatMath.rollSuccess(context.actor.computedStats.critChance, critRoll)
-		damageDealt = if plannedSkill.damageMultiplier > 0
+		damageDealt = if plannedSkill.damageMultiplier > 0 and targetState ~= nil
 			then CombatMath.calculateDamage(
 				context.actor.computedStats,
 				context.target.computedStats,
@@ -142,9 +131,29 @@ function CombatActionResolver.resolveAction(context)
 				didCrit
 			)
 			else 0
-		targetState.currentHp = math.max(targetState.currentHp - damageDealt, 0)
+		if targetState ~= nil and damageDealt > 0 then
+			targetState.currentHp = math.max(targetState.currentHp - damageDealt, 0)
+		end
 
-		if #plannedSkill.appliedStatusIds > 0 then
+		local healRecipientState = nil
+		if plannedSkill.healMultiplier > 0 then
+			if plannedSkill.targetKind == "Self" then
+				healRecipientState = actorState
+			elseif targetState ~= nil then
+				healRecipientState = targetState
+			end
+		end
+		if healRecipientState ~= nil then
+			local nextHp = math.min(
+				healRecipientState.currentHp
+					+ CombatMath.calculateHealing(context.actor.computedStats, plannedSkill),
+				healRecipientState.maxHp
+			)
+			healingDone = math.max(nextHp - healRecipientState.currentHp, 0)
+			healRecipientState.currentHp = nextHp
+		end
+
+		if targetState ~= nil and #plannedSkill.appliedStatusIds > 0 then
 			local statusRoll
 			statusRoll, context.rngState = DeterministicRandom.nextFloat(context.rngState)
 			local statusChance =
@@ -159,7 +168,7 @@ function CombatActionResolver.resolveAction(context)
 		end
 	end
 
-	if targetState.currentHp <= 0 then
+	if targetState ~= nil and targetState.currentHp <= 0 then
 		table.insert(defeatedCombatantIds, context.target.combatantId)
 	end
 
@@ -177,6 +186,7 @@ function CombatActionResolver.resolveAction(context)
 		outcome = if didHit then "Resolved" else "Missed",
 		hit = didHit,
 		damageDealt = damageDealt,
+		healingDone = healingDone,
 		appliedEffectIds = appliedEffectIds,
 		defeatedCombatantIds = defeatedCombatantIds,
 		resolvedAt = context.now,

@@ -93,7 +93,8 @@ local function formatGradeTag(gradeId)
 		return ""
 	end
 
-	return " " .. paint(string.format("[%s]", definition.displayName), color3ToRichText(definition.color))
+	return " "
+		.. paint(string.format("[%s]", definition.displayName), color3ToRichText(definition.color))
 end
 
 local function getStatusColor(statusId)
@@ -267,7 +268,10 @@ local function formatCombatantLines(combatant, elapsedTime)
 		for _, skillId in ipairs(combatant.specialSkillIds) do
 			table.insert(
 				activeParts,
-				paint(getSkillLabel(skillId, "SpecialSkill"), getActionColor(skillId, "SpecialSkill"))
+				paint(
+					getSkillLabel(skillId, "SpecialSkill"),
+					getActionColor(skillId, "SpecialSkill")
+				)
 			)
 		end
 		activeSkillLabel = table.concat(activeParts, ", ")
@@ -316,7 +320,10 @@ local function formatJournalLine(entry, labelMap)
 		if type(result.appliedEffectIds) == "table" and #result.appliedEffectIds > 0 then
 			local effectLabels = {}
 			for _, effectId in ipairs(result.appliedEffectIds) do
-				table.insert(effectLabels, paint(getStatusLabel(effectId), getStatusColor(effectId)))
+				table.insert(
+					effectLabels,
+					paint(getStatusLabel(effectId), getStatusColor(effectId))
+				)
 			end
 			line ..= string.format(" | эффект %s", table.concat(effectLabels, ", "))
 		end

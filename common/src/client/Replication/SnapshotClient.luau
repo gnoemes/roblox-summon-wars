@@ -10,6 +10,20 @@ local Cleaner =
 local SnapshotClient = {}
 SnapshotClient.__index = SnapshotClient
 
+local function shouldApplyEnvelope(currentEnvelope, nextEnvelope)
+	if currentEnvelope == nil then
+		return true
+	end
+
+	local currentRevision = currentEnvelope.revision
+	local nextRevision = nextEnvelope.revision
+	if type(currentRevision) ~= "number" or type(nextRevision) ~= "number" then
+		return true
+	end
+
+	return nextRevision >= currentRevision
+end
+
 function SnapshotClient.new(config)
 	assert(type(config) == "table", "SnapshotClient config must be a table")
 	assert(config.network ~= nil, "SnapshotClient requires network service")
@@ -38,6 +52,11 @@ end
 
 function SnapshotClient:_applyEnvelope(envelope)
 	local bucket = self:_getSnapshotBucket()
+	local currentEnvelope = bucket[envelope.topic]
+	if not shouldApplyEnvelope(currentEnvelope, envelope) then
+		return
+	end
+
 	bucket[envelope.topic] = envelope
 
 	self._changed:Fire(envelope.topic, envelope)

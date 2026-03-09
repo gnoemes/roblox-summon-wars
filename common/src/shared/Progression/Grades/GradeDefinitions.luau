@@ -34,7 +34,8 @@ local rawDefinitions = {
 	}),
 }
 
-local registry = Registry.create("GradeDefinitions", rawDefinitions, "gradeId", GradeDefinition.assert)
+local registry =
+	Registry.create("GradeDefinitions", rawDefinitions, "gradeId", GradeDefinition.assert)
 local orderedDefinitions = {}
 
 for _, definition in pairs(registry.entries()) do

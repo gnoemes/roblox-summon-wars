@@ -50,4 +50,24 @@ function CombatTargeting.selectFighterTarget(fighterCombatants, rngState)
 	return DeterministicRandom.nextWeightedEntry(rngState, weighted)
 end
 
+function CombatTargeting.selectSupportTarget(combatants)
+	local selected = nil
+	local selectedRatio = nil
+
+	for _, combatant in ipairs(combatants) do
+		if isAlive(combatant.runtimeState) then
+			local maxHp = math.max(combatant.runtimeState.maxHp, 1)
+			local ratio = combatant.runtimeState.currentHp / maxHp
+			if selected == nil or ratio < selectedRatio then
+				selected = combatant
+				selectedRatio = ratio
+			elseif ratio == selectedRatio and combatant.combatantId < selected.combatantId then
+				selected = combatant
+			end
+		end
+	end
+
+	return selected
+end
+
 return CombatTargeting

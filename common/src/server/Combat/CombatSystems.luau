@@ -27,12 +27,26 @@ local function appendJournalEntry(encounter, entry)
 	})
 end
 
-local function getRunningEncounterIds(world)
+local function getEncounterTimeScale(context, encounter)
+	local sandboxService = context.services:getOptional("CombatSandboxService")
+	if sandboxService == nil then
+		return 1
+	end
+
+	local timeScale = sandboxService:getTimeScaleForUserId(encounter.ownerUserId)
+	if type(timeScale) ~= "number" or timeScale <= 0 then
+		return 1
+	end
+
+	return timeScale
+end
+
+local function getRunningEncounterScales(world, context)
 	local running = {}
 
 	for _, encounter in world:query(Components.Encounter) do
 		if encounter.state == "Running" then
-			running[encounter.encounterId] = true
+			running[encounter.encounterId] = getEncounterTimeScale(context, encounter)
 		end
 	end
 
@@ -141,6 +155,31 @@ local function decrementCooldowns(runtimeState, deltaTime)
 	}), true
 end
 
+local function selectTargetForSkill(skillDefinition, actor, fighters, enemies, rngState)
+	if skillDefinition.targetKind == "Enemy" then
+		if actor.kind == "Fighter" then
+			return CombatTargeting.selectEnemyTarget(enemies), rngState
+		end
+
+		return CombatTargeting.selectFighterTarget(fighters, rngState)
+	end
+
+	if skillDefinition.targetKind == "Self" then
+		return actor, rngState
+	end
+
+	if skillDefinition.targetKind == "Ally" then
+		local allies = if actor.kind == "Fighter" then fighters else enemies
+		return CombatTargeting.selectSupportTarget(allies), rngState
+	end
+
+	if skillDefinition.targetKind == "None" then
+		return nil, rngState
+	end
+
+	error(string.format("Unsupported target kind %s", tostring(skillDefinition.targetKind)))
+end
+
 local function buildEncounterResult(encounter, journalEntries, fighters, enemies)
 	local actionResults = {}
 	for _, entry in ipairs(journalEntries) do
@@ -185,25 +224,27 @@ local tickEncounterTimeSystem = ECS.SystemBuilder.server("Simulation", function(
 
 	for entityId, encounter in world:query(Components.Encounter) do
 		if encounter.state == "Running" then
+			local timeScale = getEncounterTimeScale(context, encounter)
 			world:insert(
 				entityId,
 				encounter:patch({
-					elapsedTime = encounter.elapsedTime + deltaTime,
+					elapsedTime = encounter.elapsedTime + deltaTime * timeScale,
 				})
 			)
 		end
 	end
 end)
 
-local tickCooldownsSystem = ECS.SystemBuilder.server("Simulation", function(world)
-	local runningEncounterIds = getRunningEncounterIds(world)
+local tickCooldownsSystem = ECS.SystemBuilder.server("Simulation", function(world, context)
+	local runningEncounterScales = getRunningEncounterScales(world, context)
 	local deltaTime = ECS.useDeltaTime()
 
 	for entityId, combatant, runtime in
 		world:query(Components.Combatant, Components.CombatantRuntime)
 	do
-		if runningEncounterIds[combatant.encounterId] == true and runtime.currentHp > 0 then
-			local nextRuntime, changed = decrementCooldowns(runtime, deltaTime)
+		local timeScale = runningEncounterScales[combatant.encounterId]
+		if timeScale ~= nil and runtime.currentHp > 0 then
+			local nextRuntime, changed = decrementCooldowns(runtime, deltaTime * timeScale)
 			if changed then
 				world:insert(entityId, nextRuntime)
 			end
@@ -291,13 +332,8 @@ local resolveActionsSystem = ECS.SystemBuilder.server("Simulation", function(wor
 					or CombatConfig.SkillDefinitions.get(actor.basicSkillId)
 				local target = nil
 				local nextRngState = nextEncounter.rngState
-
-				if actor.kind == "Fighter" then
-					target = CombatTargeting.selectEnemyTarget(enemies)
-				else
-					target, nextRngState =
-						CombatTargeting.selectFighterTarget(fighters, nextRngState)
-				end
+				target, nextRngState =
+					selectTargetForSkill(skillDefinition, actor, fighters, enemies, nextRngState)
 
 				local resolved = CombatActionResolver.resolveAction({
 					encounterId = encounter.encounterId,
@@ -312,7 +348,11 @@ local resolveActionsSystem = ECS.SystemBuilder.server("Simulation", function(wor
 				resolved.actorState.nextActionAt = actor.runtimeState.nextActionAt
 					+ actor.computedStats.attackIntervalSeconds
 				patchCombatantRuntime(world, actor, resolved.actorState)
-				if target ~= nil and resolved.targetState ~= nil then
+				if
+					target ~= nil
+					and resolved.targetState ~= nil
+					and target.entityId ~= actor.entityId
+				then
 					patchCombatantRuntime(world, target, resolved.targetState)
 				end
 

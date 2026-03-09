@@ -20,6 +20,7 @@ export type SkillDefinition = {
 	kind: string,
 	targetKind: string,
 	triggerKind: string,
+	selectionPriority: number?,
 	cooldownSeconds: number?,
 	damageMultiplier: number,
 	healMultiplier: number,
@@ -67,6 +68,10 @@ function SkillDefinition.assert(value, fieldName)
 		value.triggerKind,
 		SkillTriggerKinds,
 		string.format("%s.triggerKind", fieldName)
+	)
+	Contract.assertOptionalNonNegativeNumber(
+		value.selectionPriority,
+		string.format("%s.selectionPriority", fieldName)
 	)
 	Contract.assertOptionalNonNegativeNumber(
 		value.cooldownSeconds,

@@ -46,12 +46,13 @@ function PlayerSessionService:_buildDebugSummary()
 	local sessions = {}
 
 	for userId, session in pairs(self._sessionsByUserId) do
+		local readModel = ProfileReadModel.fromDocument(session.document)
 		table.insert(sessions, {
 			userId = userId,
 			dirty = session.isDirty,
 			revision = session.document.meta.profileRevision,
-			wallets = ProfileReadModel.fromDocument(session.document).wallets,
-			resources = ProfileReadModel.fromDocument(session.document).resources,
+			wallets = readModel.wallets,
+			resources = readModel.resources,
 		})
 	end
 
@@ -100,6 +101,23 @@ function PlayerSessionService:_saveAndReleasePlayer(player)
 	self:_saveSession(session)
 	self._sessionsByPlayer[player] = nil
 	self._sessionsByUserId[getPlayerKey(player)] = nil
+end
+
+function PlayerSessionService:_commitMutation(player, mutator)
+	assert(type(mutator) == "function", "PlayerSessionService mutator must be a function")
+
+	local session = self:getSession(player)
+	local draft = ProfileDocument.clone(session.document)
+	local results = table.pack(pcall(mutator, draft))
+	if not results[1] then
+		error(results[2], 0)
+	end
+
+	session.document = draft
+	session.isDirty = true
+	self:_publishProfile(player)
+
+	return table.unpack(results, 2, results.n)
 end
 
 function PlayerSessionService:start()
@@ -153,58 +171,39 @@ function PlayerSessionService:readProfile(player)
 end
 
 function PlayerSessionService:mutate(player, reason, mutator)
-	assert(type(mutator) == "function", "PlayerSessionService mutator must be a function")
-
-	local session = self:getSession(player)
-	mutator(session.document)
-	ProfileDocument.touch(session.document, self._now())
-	ProfileDocument.appendEconomyEntry(session.document, {
-		at = self._now(),
-		revision = session.document.meta.profileRevision,
-		bucket = "mutations",
-		key = reason or "unspecified",
-		delta = 0,
-		balance = 0,
-		reason = reason or "unspecified",
-	})
-	session.isDirty = true
-	self:_publishProfile(player)
-
-	return ProfileDocument.clone(session.document)
+	return self:_commitMutation(player, function(draft)
+		mutator(draft)
+		ProfileDocument.touch(draft, self._now())
+		ProfileDocument.appendEconomyEntry(draft, {
+			at = self._now(),
+			revision = draft.meta.profileRevision,
+			bucket = "mutations",
+			key = reason or "unspecified",
+			delta = 0,
+			balance = 0,
+			reason = reason or "unspecified",
+		})
+		return ProfileDocument.clone(draft)
+	end)
 end
 
 function PlayerSessionService:adjustWallet(player, walletId, delta, reason)
-	local session = self:getSession(player)
-	local balance, revision = ProfileDocument.adjustCounter(
-		session.document,
-		"wallets",
-		walletId,
-		delta,
-		reason,
-		self._now()
-	)
-
-	session.isDirty = true
-	self:_publishProfile(player)
-
-	return balance, revision
+	return self:_commitMutation(player, function(draft)
+		return ProfileDocument.adjustCounter(draft, "wallets", walletId, delta, reason, self._now())
+	end)
 end
 
 function PlayerSessionService:adjustResource(player, resourceId, delta, reason)
-	local session = self:getSession(player)
-	local balance, revision = ProfileDocument.adjustCounter(
-		session.document,
-		"resources",
-		resourceId,
-		delta,
-		reason,
-		self._now()
-	)
-
-	session.isDirty = true
-	self:_publishProfile(player)
-
-	return balance, revision
+	return self:_commitMutation(player, function(draft)
+		return ProfileDocument.adjustCounter(
+			draft,
+			"resources",
+			resourceId,
+			delta,
+			reason,
+			self._now()
+		)
+	end)
 end
 
 function PlayerSessionService:savePlayer(player)

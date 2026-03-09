@@ -273,7 +273,9 @@ function CombatEncounterService:getDebugState(player)
 		local fighterMetadata = fighterMetadataByCombatantId[combatantId]
 		persistentFighters[combatantId] = {
 			combatantId = combatantId,
-			displayName = if fighterMetadata ~= nil then fighterMetadata.displayName else combatantId,
+			displayName = if fighterMetadata ~= nil
+				then fighterMetadata.displayName
+				else combatantId,
 			grade = if fighterMetadata ~= nil then fighterMetadata.grade else nil,
 			currentHp = fighterState.currentHp,
 			maxHp = fighterState.maxHp,
