@@ -117,3 +117,68 @@
    - Если runtime использует временный fallback до появления реальных данных/объектов (например, позиция до появления `HumanoidRootPart`, placeholder view state, bootstrap snapshot), этот fallback нельзя безусловно кэшировать как окончательное состояние.
    - Нужно проектировать логику так, чтобы после появления авторитетных runtime-данных fallback автоматически заменялся нормальным значением.
    - При sync/spawn flows нужно учитывать не только первичное создание сущности, но и её обновление при смене активного профиля/loadout, иначе runtime и UI расходятся.
+
+---
+
+## 6) Техническая архитектура проекта
+
+Если пользователь не просит явный рефакторинг, новые системы должны встраиваться в этот каркас, а не создавать альтернативный runtime рядом.
+
+### 6.1 Runtime bootstrap
+- `places/*/src/server/Main.server.luau` и `places/*/src/client/Main.client.luau` должны оставаться тонкими entrypoint-скриптами.
+- Place-specific wiring делается в `places/*/src/server/Bootstrap.luau` и `places/*/src/client/Bootstrap.luau`.
+- Основной runtime lives in common-слое и поднимается через place bootstrap, а не собирается заново в каждом place.
+
+### 6.2 Feature contract
+- Новые фичи добавляются папками:
+  - `places/*/src/server/Features/<FeatureName>/ServerFeature.luau`
+  - `places/*/src/client/Features/<FeatureName>/ClientFeature.luau`
+- Feature modules подхватываются автоматически через shared `FeatureLoader`.
+- Разрешенные hooks feature-модуля:
+  - `registerServices(context)`
+  - `initialize(context)`
+  - `systems(context)`
+  - `start(context)`
+  - `stop(context)`
+- Новые фичи должны получать зависимости через `context.services:get(...)`, а не через хаотичные прямые require-связи между фичами.
+
+### 6.3 Shared runtime и ECS
+- `common/src/shared/Config/Runtime.luau` — единый источник для runtime-констант, network namespaces и ECS phase ordering.
+- `common/src/shared/ECS/init.luau` — общий wrapper над Matter.
+- `common/src/shared/ECS/RealmPhases.luau` — фиксированные фазы и anchors для стабильного порядка.
+- `common/src/shared/ECS/SystemBuilder.luau` — основной способ объявлять systems через phase name, а не через разрозненные priority-числа.
+- Новые ECS systems должны по умолчанию объявляться через `SystemBuilder.server(...)` / `SystemBuilder.client(...)`.
+
+### 6.4 Data layer
+- Shared сериализуемые документы и read-models лежат в `common/src/shared/Data/*`.
+- Server-side repositories и session/application services лежат в `common/src/server/Data/*`.
+- Persistent business data не должны жить в ECS.
+- ECS хранит только live runtime projection/state.
+- Источник истины для долгоживущих данных: профиль игрока, валюты, ресурсы, inventories/storage, progression/unlocks.
+- Доступ к persistence должен идти через repository contract. Backend можно менять, не переписывая gameplay/service logic.
+- Текущий baseline backend может быть in-memory adapter; later DataStore/backend adapter должен менять только persistence implementation layer.
+
+### 6.5 Replication / snapshots
+- Server snapshot services лежат в `common/src/server/Replication/*`.
+- Client snapshot consumers лежат в `common/src/client/Replication/*`.
+- Клиент не должен читать server-side tables/services напрямую и не должен зависеть от внутренних ECS-компонентов сервера.
+- Клиентская сторона должна получать read-only snapshots/read-models по темам.
+- Bootstrap/resync состояния клиента должен идти через snapshot layer, а не через ad-hoc remote spaghetti.
+
+### 6.6 Debug framework
+- Server debug services лежат в `common/src/server/Debug/*`.
+- Client debug services/host лежат в `common/src/client/Debug/*`.
+- Любая debug-функциональность должна регистрироваться через единый debug framework: `DebugService` / client debug layer.
+- Нельзя создавать отдельные feature-specific debug remotes, chat-команды или временные debug scripts вне общего debug framework, если только пользователь явно не просит одноразовый throwaway prototype.
+
+### 6.7 Service boundaries
+- Общие runtime utilities: `common/src/shared/Runtime/*`
+- Shared low-level utilities: `common/src/shared/Utils/*`
+- Shared ephemeral namespace store: `common/src/shared/State/StateStore.luau`
+- Server/client runtime должны регистрировать built-in services в `ServiceRegistry`, а фичи должны получать зависимости через `context.services:get(...)`.
+- После bootstrap service registry seal-ится; поздняя хаотичная регистрация сервисов считается плохой практикой.
+
+### 6.8 Tooling
+- Форматирование, линт и build-check должны идти через `tools/Fmt.ps1`, `tools/Lint.ps1`, `tools/Check.ps1`.
+- Эти скрипты должны работать с multi-place структурой (`common/src` + `places/*/src`), а не ожидать плоский `src/`.
+- Если tooling начинает расходиться с реальной структурой репозитория, исправляй tooling, а не обходи проблему локальными костылями.
