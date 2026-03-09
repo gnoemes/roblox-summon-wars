@@ -1,0 +1,16 @@
+return table.freeze({
+	SkillKinds = require(script.SkillKinds),
+	SkillTargetKinds = require(script.SkillTargetKinds),
+	SkillTriggerKinds = require(script.SkillTriggerKinds),
+	StatusKinds = require(script.StatusKinds),
+	DropEntryKinds = require(script.DropEntryKinds),
+	StatusDefinition = require(script.StatusDefinition),
+	StatusDefinitions = require(script.StatusDefinitions),
+	SkillDefinition = require(script.SkillDefinition),
+	SkillDefinitions = require(script.SkillDefinitions),
+	DropEntryDefinition = require(script.DropEntryDefinition),
+	DropTableDefinition = require(script.DropTableDefinition),
+	DropTables = require(script.DropTables),
+	EnemyDefinition = require(script.EnemyDefinition),
+	EnemyDefinitions = require(script.EnemyDefinitions),
+})

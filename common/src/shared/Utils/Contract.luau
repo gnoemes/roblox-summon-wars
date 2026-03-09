@@ -79,6 +79,14 @@ function Contract.assertPositiveNumber(value, fieldName)
 	return value
 end
 
+function Contract.assertOptionalPositiveNumber(value, fieldName)
+	if value ~= nil then
+		Contract.assertPositiveNumber(value, fieldName)
+	end
+
+	return value
+end
+
 function Contract.assertInteger(value, fieldName)
 	Contract.assertNumber(value, fieldName)
 	assert(value % 1 == 0, string.format("%s must be an integer", formatFieldName(fieldName)))
