@@ -2,5 +2,7 @@ return table.freeze({
 	Components = require(script.CombatComponents),
 	CombatSystems = require(script.CombatSystems),
 	CombatEncounterService = require(script.CombatEncounterService),
+	CombatDebugViewService = require(script.CombatDebugViewService),
+	CombatDebugViewSystems = require(script.CombatDebugViewSystems),
 	SyntheticCombatFactory = require(script.SyntheticCombatFactory),
 })

@@ -1,3 +1,4 @@
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Components = require(script.Parent.CombatComponents)
@@ -175,6 +176,7 @@ function CombatEncounterService:completeEncounter(encounterId, payload)
 		encounterId = encounterId,
 		result = payload.result,
 		journalEntries = payload.journalEntries,
+		combatantLabelsById = payload.combatantLabelsById,
 	}
 	table.insert(runState.completedEncounterIds, encounterId)
 	runState.persistentFighterStatesByCombatantId = EncounterPersistencePolicy.apply(
@@ -182,6 +184,13 @@ function CombatEncounterService:completeEncounter(encounterId, payload)
 		runState.baseFighterStatesByCombatantId,
 		payload.finalFighterStatesByCombatantId
 	)
+
+	if runState.extractionType == "HuntingGrounds" and payload.result.outcome == "Victory" then
+		local player = Players:GetPlayerByUserId(ownerUserId)
+		if player ~= nil then
+			self:_spawnEncounter(player, runState)
+		end
+	end
 end
 
 function CombatEncounterService:queueEncounterCleanup(encounterId)
@@ -224,10 +233,11 @@ function CombatEncounterService:getDebugState(player)
 
 	local liveCombatants = {}
 	if runState.activeEncounterId ~= nil then
-		for _, combatant, stats, runtime in
+		for _, combatant, stats, abilities, runtime in
 			self._world:query(
 				Components.Combatant,
 				Components.CombatantStats,
+				Components.CombatantAbilities,
 				Components.CombatantRuntime
 			)
 		do
@@ -240,8 +250,11 @@ function CombatEncounterService:getDebugState(player)
 					maxHp = runtime.maxHp,
 					nextActionAt = runtime.nextActionAt,
 					attackIntervalSeconds = stats.computedStats.attackIntervalSeconds,
-					activeStatuses = runtime.statusesById,
-					cooldowns = runtime.remainingCooldownsBySkillId,
+					basicSkillId = abilities.basicSkillId,
+					specialSkillIds = clone(abilities.specialSkillIds),
+					passiveSkillIds = clone(abilities.passiveSkillIds),
+					activeStatuses = clone(runtime.statusesById),
+					cooldowns = clone(runtime.remainingCooldownsBySkillId),
 				})
 			end
 		end

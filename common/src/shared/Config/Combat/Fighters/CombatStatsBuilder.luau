@@ -1,8 +1,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local ClassDefinitions = require(script.ClassDefinitions)
-local ClassPackages = require(script.ClassPackages)
-local GradeModifiers = require(script.GradeModifiers)
+local ClassDefinitions = require(script.Parent:WaitForChild("ClassDefinitions"))
+local ClassPackages = require(script.Parent:WaitForChild("ClassPackages"))
+local GradeModifiers = require(script.Parent:WaitForChild("GradeModifiers"))
 local BaseCombatStats = require(script.Parent.Parent.Parent.Parent.Stats.BaseCombatStats)
 local ComputedCombatStats = require(
 	ReplicatedStorage:WaitForChild("Shared")

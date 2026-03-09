@@ -7,6 +7,10 @@ local definitions = {}
 
 local function insertDefinition(definitionId, definition, registryName)
 	assert(
+		type(definitionId) == "string" and definitionId ~= "",
+		string.format("%s is missing its id", registryName)
+	)
+	assert(
 		definitions[definitionId] == nil,
 		string.format("Duplicate %s %s", registryName, definitionId)
 	)
@@ -15,9 +19,11 @@ end
 
 local commonFolder = script.Parent:WaitForChild("Common")
 for _, skillDefinition in
-	ipairs(ContentLoader.flattenArrays({
-		ContentLoader.requireModuleChildren(commonFolder:WaitForChild("Skills")),
-	}))
+	ipairs(
+		ContentLoader.flattenArrays(
+			ContentLoader.requireModuleChildren(commonFolder:WaitForChild("Skills"))
+		)
+	)
 do
 	insertDefinition(skillDefinition.skillId, skillDefinition, "skill definition")
 end
@@ -30,9 +36,11 @@ end
 
 local regionsFolder = script.Parent:WaitForChild("Regions")
 for _, skillDefinition in
-	ipairs(ContentLoader.flattenArrays({
-		ContentLoader.requireRegionChildModules(regionsFolder, "Skills"),
-	}))
+	ipairs(
+		ContentLoader.flattenArrays(
+			ContentLoader.requireRegionChildModules(regionsFolder, "Skills")
+		)
+	)
 do
 	insertDefinition(skillDefinition.skillId, skillDefinition, "skill definition")
 end

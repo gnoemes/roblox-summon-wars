@@ -122,7 +122,11 @@ local function decrementCooldowns(runtimeState, deltaTime)
 
 	for skillId, remaining in pairs(runtimeState.remainingCooldownsBySkillId) do
 		local nextRemaining = math.max(remaining - deltaTime, 0)
-		nextCooldowns[skillId] = nextRemaining
+		if nextRemaining > 0.0001 then
+			nextCooldowns[skillId] = nextRemaining
+		else
+			changed = true
+		end
 		if math.abs(nextRemaining - remaining) > 0.0001 then
 			changed = true
 		end
@@ -376,6 +380,20 @@ local finalizeEncountersSystem = ECS.SystemBuilder.server("Cleanup", function(wo
 					}
 				end
 
+				local combatantLabelsById = {}
+				for _, fighter in ipairs(fighters) do
+					combatantLabelsById[fighter.combatantId] = {
+						displayName = fighter.displayName,
+						kind = fighter.kind,
+					}
+				end
+				for _, enemy in ipairs(enemies) do
+					combatantLabelsById[enemy.combatantId] = {
+						displayName = enemy.displayName,
+						kind = enemy.kind,
+					}
+				end
+
 				encounterService:completeEncounter(encounter.encounterId, {
 					ownerUserId = encounter.ownerUserId,
 					result = buildEncounterResult(
@@ -386,6 +404,7 @@ local finalizeEncountersSystem = ECS.SystemBuilder.server("Cleanup", function(wo
 					),
 					journalEntries = journalEntries,
 					finalFighterStatesByCombatantId = finalFighterStatesByCombatantId,
+					combatantLabelsById = combatantLabelsById,
 				})
 			end
 		end

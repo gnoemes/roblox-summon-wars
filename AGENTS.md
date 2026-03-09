@@ -91,6 +91,7 @@
 
 3) **ModuleScript vs Script/LocalScript**
    - `require` **нельзя** вызывать на `Script`/`LocalScript`. Только `ModuleScript`.
+   - `require(script.X)` допустим только в `init.luau`-модулях, которые реально владеют child-модулями через folder mapping. В обычных `ModuleScript` sibling-модули и sibling-папки нужно брать через `script.Parent:WaitForChild("X")`; `script:WaitForChild("X")` для sibling-объектов тоже считается ошибкой.
    - LocalScript должен запускаться **сам**, без `require` из `Main.client`.
 
 4) **Data-driven**
@@ -192,3 +193,5 @@
 - Fighter business model / snapshot должен хранить отдельно экипированные активные скиллы через `activeSkillIds`.
 - Если позже появятся rolled/owned skill pools у конкретного бойца, они должны жить в persistent/session model, а не в ECS-компонентах.
 - ECS/runtime combat state должен получать только реально активные способности, cooldowns и другой live state, нужный симуляции.
+
+

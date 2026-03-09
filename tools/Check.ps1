@@ -9,6 +9,7 @@ $Here = $PSScriptRoot
 
 $Fmt = Join-Path $Here "Fmt.ps1"
 $Lint = Join-Path $Here "Lint.ps1"
+$RuntimeSmoke = Join-Path $Here "RuntimeSmoke.ps1"
 
 if (!(Test-Path $Fmt)) {
 	throw "Ne naiden skript: $Fmt"
@@ -18,8 +19,13 @@ if (!(Test-Path $Lint)) {
 	throw "Ne naiden skript: $Lint"
 }
 
+if (!(Test-Path $RuntimeSmoke)) {
+	throw "Ne naiden skript: $RuntimeSmoke"
+}
+
 & $Fmt
 & $Lint
+& $RuntimeSmoke
 
 $Root = Resolve-Path (Join-Path $Here "..")
 Set-Location $Root

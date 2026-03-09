@@ -1,6 +1,6 @@
 local Registry = require(script.Parent.Parent.Parent.Registry)
-local ClassPackages = require(script.ClassPackages)
-local ClassDefinition = require(script.ClassDefinition)
+local ClassPackages = require(script.Parent:WaitForChild("ClassPackages"))
+local ClassDefinition = require(script.Parent:WaitForChild("ClassDefinition"))
 
 local definitions = {}
 for classId, package in pairs(ClassPackages.entries()) do

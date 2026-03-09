@@ -1,5 +1,5 @@
 local ContentLoader = require(script.Parent.Parent.ContentLoader)
-local ClassDefinition = require(script.ClassDefinition)
+local ClassDefinition = require(script.Parent:WaitForChild("ClassDefinition"))
 
 local function assertClassPackage(value, fieldName)
 	assert(type(value) == "table", string.format("%s must be a table", fieldName))
@@ -19,11 +19,11 @@ local function assertClassPackage(value, fieldName)
 end
 
 local rawPackages = {}
-for _, package in ipairs(ContentLoader.requireModuleChildren(script:WaitForChild("Classes"))) do
+for _, package in ipairs(ContentLoader.requireModuleChildren(script.Parent:WaitForChild("Classes"))) do
 	assertClassPackage(package, "ClassPackages.entry")
 	local classId = package.class.classId
 	assert(rawPackages[classId] == nil, string.format("Duplicate class package %s", classId))
-	rawPackages[classId] = table.freeze(package)
+	rawPackages[classId] = package
 end
 
 local orderedPackages = {}
@@ -41,14 +41,16 @@ table.sort(orderedPackages, function(left, right)
 	return left.classId < right.classId
 end)
 
+local frozenPackages = table.freeze(rawPackages)
+
 local api = {}
 
 function api.has(classId)
-	return type(classId) == "string" and rawPackages[classId] ~= nil
+	return type(classId) == "string" and frozenPackages[classId] ~= nil
 end
 
 function api.get(classId)
-	return rawPackages[classId]
+	return frozenPackages[classId]
 end
 
 function api.list()
@@ -60,7 +62,7 @@ function api.list()
 end
 
 function api.entries()
-	return table.freeze(rawPackages)
+	return frozenPackages
 end
 
 return table.freeze(api)

@@ -5,8 +5,8 @@ return EnemyDefinition.new({
 	displayName = "Venom Brute",
 	tier = "Elite",
 	computedStats = {
-		hp = 780,
-		damage = 21,
+		hp = 7800,
+		damage = 150,
 		defense = 5,
 		accuracy = 0.8,
 		evasion = 0.08,

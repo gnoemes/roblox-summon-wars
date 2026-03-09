@@ -5,7 +5,7 @@ return EnemyDefinition.new({
 	displayName = "Training Dummy",
 	tier = "Normal",
 	computedStats = {
-		hp = 420,
+		hp = 2100,
 		damage = 18,
 		defense = 3,
 		accuracy = 0.75,
