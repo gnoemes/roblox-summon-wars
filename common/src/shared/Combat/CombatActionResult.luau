@@ -12,6 +12,7 @@ export type CombatActionResult = {
 	skillId: string?,
 	outcome: string,
 	hit: boolean,
+	criticalHit: boolean,
 	damageDealt: number,
 	healingDone: number,
 	appliedEffectIds: { string },
@@ -44,6 +45,7 @@ function CombatActionResult.assert(value, fieldName)
 		string.format("%s.outcome", fieldName)
 	)
 	Contract.assertBoolean(value.hit, string.format("%s.hit", fieldName))
+	Contract.assertBoolean(value.criticalHit, string.format("%s.criticalHit", fieldName))
 	Contract.assertNonNegativeNumber(value.damageDealt, string.format("%s.damageDealt", fieldName))
 	Contract.assertNonNegativeNumber(value.healingDone, string.format("%s.healingDone", fieldName))
 	Contract.assertStringArray(

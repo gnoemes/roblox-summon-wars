@@ -14,6 +14,18 @@ Use a dark magical gradient background, a premium fantasy-tech frame, clean ligh
 
 No text, no letters, no watermark, no character portrait, no environment scene, no extra objects, no messy composition.
 
+Transparency rule (very important):
+
+The final icon must have a transparent background ONLY outside the frame.
+
+The frame itself and everything inside the frame must remain fully rendered and visible, including the dark magical gradient background inside the icon.
+
+Do NOT remove the inner background of the icon.
+Do NOT make the interior transparent.
+Transparency must exist ONLY outside the frame.
+
+Export the icon as a clean PNG with alpha channel where the area outside the frame is transparent.
+No checkerboard pattern, no gray background, no solid background outside the frame.
 
 Instruction:
 Create a square game skill icon in a clean stylized anime-fantasy UI style, designed for a Roblox action/auto-battle game.

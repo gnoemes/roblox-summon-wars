@@ -6,7 +6,7 @@ return EnemyDefinition.new({
 	tier = "Elite",
 	computedStats = {
 		hp = 7800,
-		damage = 150,
+		damage = 45,
 		defense = 5,
 		accuracy = 0.8,
 		evasion = 0.08,
@@ -23,6 +23,9 @@ return EnemyDefinition.new({
 	passiveSkillIds = {},
 	dropTableId = "Drop.None",
 	threatTag = "Poison",
+	dotResponsesByStatusId = {
+		["Status.Poison"] = "Immune",
+	},
 	flags = {
 		isRare = false,
 		isChestReplacement = false,

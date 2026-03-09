@@ -38,6 +38,34 @@ local function sortStatusIds(statusesById)
 	return statusIds
 end
 
+local function applyStatusStacksToState(statusesById, statusId, stacksToAdd, now)
+	if stacksToAdd <= 0 then
+		return statusesById, false
+	end
+
+	local definition = CombatConfig.StatusDefinitions.get(statusId)
+	local current = statusesById[statusId]
+
+	if current == nil then
+		statusesById[statusId] = {
+			statusId = statusId,
+			stacks = math.min(stacksToAdd, definition.maxStacks),
+			expiresAt = now + definition.baseDurationSeconds,
+			nextTickAt = if definition.tickIntervalSeconds ~= nil
+				then now + definition.tickIntervalSeconds
+				else nil,
+		}
+	else
+		current.stacks = math.min(current.stacks + stacksToAdd, definition.maxStacks)
+		current.expiresAt = now + definition.baseDurationSeconds
+		if definition.tickIntervalSeconds ~= nil and current.nextTickAt == nil then
+			current.nextTickAt = now + definition.tickIntervalSeconds
+		end
+	end
+
+	return statusesById, true
+end
+
 function CombatStatusEngine.cloneStatuses(statusesById)
 	return cloneStatuses(statusesById)
 end
@@ -82,32 +110,27 @@ function CombatStatusEngine.pruneExpired(runtimeState, now)
 	return statusesById, removedStatusIds
 end
 
+function CombatStatusEngine.applyStatusStacks(runtimeState, statusId, stacksToAdd, now)
+	local statusesById = cloneStatuses(runtimeState.statusesById)
+	local changed = false
+	statusesById, changed = applyStatusStacksToState(statusesById, statusId, stacksToAdd, now)
+	if not changed then
+		return statusesById, {}
+	end
+
+	return statusesById, { statusId }
+end
+
 function CombatStatusEngine.applyStatuses(runtimeState, statusIds, now)
 	local statusesById = cloneStatuses(runtimeState.statusesById)
 	local appliedStatusIds = {}
 
 	for _, statusId in ipairs(statusIds) do
-		local definition = CombatConfig.StatusDefinitions.get(statusId)
-		local current = statusesById[statusId]
-
-		if current == nil then
-			statusesById[statusId] = {
-				statusId = statusId,
-				stacks = 1,
-				expiresAt = now + definition.baseDurationSeconds,
-				nextTickAt = if definition.tickIntervalSeconds ~= nil
-					then now + definition.tickIntervalSeconds
-					else nil,
-			}
-		else
-			current.stacks = math.min(current.stacks + 1, definition.maxStacks)
-			current.expiresAt = now + definition.baseDurationSeconds
-			if definition.tickIntervalSeconds ~= nil and current.nextTickAt == nil then
-				current.nextTickAt = now + definition.tickIntervalSeconds
-			end
+		local changed = false
+		statusesById, changed = applyStatusStacksToState(statusesById, statusId, 1, now)
+		if changed then
+			table.insert(appliedStatusIds, statusId)
 		end
-
-		table.insert(appliedStatusIds, statusId)
 	end
 
 	table.sort(appliedStatusIds)
@@ -169,6 +192,7 @@ function CombatStatusEngine.tickStatuses(context)
 					skillId = statusId,
 					outcome = "Resolved",
 					hit = true,
+					criticalHit = false,
 					damageDealt = damage,
 					healingDone = 0,
 					appliedEffectIds = { statusId },
@@ -185,9 +209,13 @@ function CombatStatusEngine.tickStatuses(context)
 		end
 	end
 
-	for statusId, statusState in pairs(statusesById) do
-		if statusState.expiresAt <= context.now then
-			statusesById[statusId] = nil
+	if currentHp <= 0 then
+		statusesById = {}
+	else
+		for statusId, statusState in pairs(statusesById) do
+			if statusState.expiresAt <= context.now then
+				statusesById[statusId] = nil
+			end
 		end
 	end
 

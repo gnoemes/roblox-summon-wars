@@ -3,18 +3,18 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ScriptEditorService = game:GetService("ScriptEditorService")
 
 local TOOLBAR_NAME = "SummonWars"
-local BUTTON_NAME = "Skill Assets"
-local WIDGET_ID = "SummonWars.SkillAssetBrowser"
-local SELECTED_SKILL_SETTING = "SummonWars.SkillAssetBrowser.SelectedSkillId"
-local SEARCH_SETTING = "SummonWars.SkillAssetBrowser.Search"
+local BUTTON_NAME = "Status Assets"
+local WIDGET_ID = "SummonWars.StatusAssetBrowser"
+local SELECTED_STATUS_SETTING = "SummonWars.StatusAssetBrowser.SelectedStatusId"
+local SEARCH_SETTING = "SummonWars.StatusAssetBrowser.Search"
 local OVERRIDES_FOLDER_NAME = "StudioAssetOverrides"
-local OVERRIDES_MODULE_NAME = "SkillAssetEntries"
-local DEFAULT_STATUS = "Sync the Rojo project, then assign Studio overrides for skill icons."
+local OVERRIDES_MODULE_NAME = "StatusAssetEntries"
+local DEFAULT_STATUS = "Sync the Rojo project, then assign Studio overrides for status icons."
 
 local toolbar = plugin:CreateToolbar(TOOLBAR_NAME)
 local toggleButton = toolbar:CreateButton(
 	BUTTON_NAME,
-	"Open the Skill Asset Browser",
+	"Open the Status Asset Browser",
 	"rbxassetid://4458901886"
 )
 toggleButton.ClickableWhenViewportHidden = true
@@ -30,6 +30,17 @@ local widgetInfo = DockWidgetPluginGuiInfo.new(
 )
 local widget = plugin:CreateDockWidgetPluginGui(WIDGET_ID, widgetInfo)
 widget.Title = BUTTON_NAME
+
+local state = {
+	statusRows = {},
+	statuses = {},
+	projectBindingsByStatusId = {},
+	overrideBindingsByStatusId = {},
+	selectedStatusId = plugin:GetSetting(SELECTED_STATUS_SETTING),
+	searchText = plugin:GetSetting(SEARCH_SETTING) or "",
+	statusText = DEFAULT_STATUS,
+	projectModules = nil,
+}
 
 local refs = {}
 
@@ -53,33 +64,6 @@ local function normalizeAssetInput(value)
 
 	return trimmed
 end
-
-local function normalizeBindingsTable(bindings)
-	local normalized = {}
-	if type(bindings) ~= "table" then
-		return normalized
-	end
-
-	for skillId, iconAssetId in pairs(bindings) do
-		if type(skillId) == "string" and skillId ~= "" and iconAssetId ~= nil then
-			normalized[skillId] = iconAssetId
-		end
-	end
-
-	return normalized
-end
-
-local state = {
-	skillRows = {},
-	skills = {},
-	projectBindingsBySkillId = {},
-	overrideBindingsBySkillId = {},
-	selectedSkillId = plugin:GetSetting(SELECTED_SKILL_SETTING),
-	searchText = plugin:GetSetting(SEARCH_SETTING) or "",
-	statusText = DEFAULT_STATUS,
-	placeholderImageAssetId = nil,
-	projectModules = nil,
-}
 
 local function assetIdToDisplay(value)
 	if value == nil then
@@ -106,40 +90,357 @@ local function assetIdToImage(value)
 	return stringValue
 end
 
-local function buildEntriesSource(bindingsBySkillId)
+local function findProjectModules()
+	local shared = ReplicatedStorage:FindFirstChild("Shared")
+	if shared == nil then
+		return nil, "ReplicatedStorage.Shared was not found. Start Rojo sync first."
+	end
+
+	local config = shared:FindFirstChild("Config")
+	if config == nil then
+		return nil, "ReplicatedStorage.Shared.Config was not found."
+	end
+
+	local combat = config:FindFirstChild("Combat")
+	local assets = config:FindFirstChild("Assets")
+	if combat == nil then
+		return nil, "ReplicatedStorage.Shared.Config.Combat was not found."
+	end
+	if assets == nil then
+		return nil, "ReplicatedStorage.Shared.Config.Assets was not found. Sync the latest repo changes."
+	end
+
+	local statusDefinitionsModule = combat:FindFirstChild("StatusDefinitions")
+	local statusEntriesModule = assets:FindFirstChild("StatusAssetEntries")
+	local imageDefaultsModule = assets:FindFirstChild("ImageDefaults")
+	if statusDefinitionsModule == nil then
+		return nil, "Combat.StatusDefinitions module was not found."
+	end
+	if statusEntriesModule == nil then
+		return nil, "Assets.StatusAssetEntries module was not found."
+	end
+	if imageDefaultsModule == nil then
+		return nil, "Assets.ImageDefaults module was not found. Sync the latest repo changes."
+	end
+
+	return {
+		statusDefinitionsModule = statusDefinitionsModule,
+		projectStatusEntriesModule = statusEntriesModule,
+		imageDefaultsModule = imageDefaultsModule,
+	}
+end
+
+local function readBindings(moduleScript)
+	if moduleScript == nil then
+		return {}, nil
+	end
+
+	local ok, bindings = pcall(require, moduleScript)
+	if not ok then
+		return nil, string.format("Failed to load %s: %s", moduleScript.Name, tostring(bindings))
+	end
+
+	if type(bindings) ~= "table" then
+		return nil, string.format("%s must return a table.", moduleScript.Name)
+	end
+
+	local normalized = {}
+	for statusId, entry in pairs(bindings) do
+		if type(statusId) == "string" and type(entry) == "table" then
+			normalized[statusId] = entry.iconAssetId
+		end
+	end
+
+	return normalized, nil
+end
+
+local function readStatuses(statusDefinitionsModule)
+	local ok, registry = pcall(require, statusDefinitionsModule)
+	if not ok then
+		return nil, string.format("Failed to load StatusDefinitions: %s", tostring(registry))
+	end
+
+	if type(registry) ~= "table" or type(registry.list) ~= "function" then
+		return nil, "StatusDefinitions did not return a registry API."
+	end
+
+	local statuses = {}
+	for _, definition in ipairs(registry.list()) do
+		table.insert(statuses, {
+			statusId = definition.statusId,
+			displayName = definition.displayName,
+			fallbackIconAssetId = definition.iconAssetId,
+		})
+	end
+
+	table.sort(statuses, function(left, right)
+		if left.displayName == right.displayName then
+			return left.statusId < right.statusId
+		end
+		return left.displayName < right.displayName
+	end)
+
+	return statuses, nil
+end
+
+local function readPlaceholderImageAssetId(imageDefaultsModule)
+	local ok, imageDefaults = pcall(require, imageDefaultsModule)
+	if not ok or type(imageDefaults) ~= "table" then
+		return nil
+	end
+
+	return imageDefaults.PlaceholderImageAssetId
+end
+
+local function buildEntriesSource(statuses, bindingsByStatusId)
 	local lines = {
 		"return table.freeze({",
 	}
+	local wroteEntry = false
 
-	local skillIds = {}
-	for skillId, iconAssetId in pairs(bindingsBySkillId or {}) do
+	for _, status in ipairs(statuses) do
+		local iconAssetId = bindingsByStatusId[status.statusId]
 		if iconAssetId ~= nil then
-			table.insert(skillIds, skillId)
+			wroteEntry = true
+			table.insert(lines, string.format("\t[%s] = {", escapeLuaString(status.statusId)))
+			table.insert(lines, string.format("\t\tstatusId = %s,", escapeLuaString(status.statusId)))
+			if type(iconAssetId) == "number" then
+				table.insert(lines, string.format("\t\ticonAssetId = %d,", iconAssetId))
+			else
+				table.insert(
+					lines,
+					string.format("\t\ticonAssetId = %s,", escapeLuaString(tostring(iconAssetId)))
+				)
+			end
+			table.insert(lines, "\t},")
 		end
 	end
-	table.sort(skillIds)
 
-	for _, skillId in ipairs(skillIds) do
-		local iconAssetId = bindingsBySkillId[skillId]
-		table.insert(lines, string.format("\t[%s] = {", escapeLuaString(skillId)))
-		table.insert(lines, string.format("\t\tskillId = %s,", escapeLuaString(skillId)))
-		if type(iconAssetId) == "number" then
-			table.insert(lines, string.format("\t\ticonAssetId = %d,", iconAssetId))
-		else
-			table.insert(
-				lines,
-				string.format("\t\ticonAssetId = %s,", escapeLuaString(tostring(iconAssetId)))
-			)
-		end
-		table.insert(lines, "\t},")
-	end
-
-	if #skillIds == 0 then
-		table.insert(lines, "\t-- Plugin-managed studio overrides. Keys must match SkillDefinition.skillId.")
+	if not wroteEntry then
+		table.insert(lines, "\t-- Plugin-managed studio overrides. Keys must match StatusDefinition.statusId.")
 	end
 
 	table.insert(lines, "})")
 	return table.concat(lines, "\n")
+end
+
+local function setStatus(text)
+	state.statusText = text
+	if refs.statusLabel ~= nil then
+		refs.statusLabel.Text = text
+	end
+end
+
+local function getStatusById(statusId)
+	for _, status in ipairs(state.statuses) do
+		if status.statusId == statusId then
+			return status
+		end
+	end
+
+	return nil
+end
+
+local function getEffectiveAssetId(status)
+	local overrideAssetId = state.overrideBindingsByStatusId[status.statusId]
+	if overrideAssetId ~= nil then
+		return overrideAssetId, "Studio override"
+	end
+
+	local projectAssetId = state.projectBindingsByStatusId[status.statusId]
+	if projectAssetId ~= nil then
+		return projectAssetId, "Project binding"
+	end
+
+	if status.fallbackIconAssetId ~= nil then
+		return status.fallbackIconAssetId, "Definition fallback"
+	end
+
+	return state.placeholderImageAssetId, "Global placeholder"
+end
+
+local function updatePreview()
+	if refs.previewImage == nil or refs.previewText == nil then
+		return
+	end
+
+	local status = getStatusById(state.selectedStatusId)
+	if status == nil then
+		refs.previewImage.Image = ""
+		refs.previewImage.Visible = false
+		refs.previewText.Text = "Select a status"
+		refs.previewText.Visible = true
+		refs.statusNameLabel.Text = "No status selected"
+		refs.statusIdLabel.Text = "-"
+		refs.assetInput.Text = ""
+		refs.projectValueLabel.Text = "-"
+		refs.fallbackValueLabel.Text = assetIdToDisplay(state.placeholderImageAssetId)
+		refs.sourceValueLabel.Text = "-"
+		return
+	end
+
+	local effectiveAssetId, sourceLabel = getEffectiveAssetId(status)
+	local projectAssetId = state.projectBindingsByStatusId[status.statusId]
+	local overrideAssetId = state.overrideBindingsByStatusId[status.statusId]
+	local imageUri = assetIdToImage(effectiveAssetId)
+
+	refs.statusNameLabel.Text = status.displayName
+	refs.statusIdLabel.Text = status.statusId
+	refs.assetInput.Text = assetIdToDisplay(overrideAssetId)
+	refs.projectValueLabel.Text = assetIdToDisplay(projectAssetId)
+	refs.fallbackValueLabel.Text = assetIdToDisplay(status.fallbackIconAssetId or state.placeholderImageAssetId)
+	refs.sourceValueLabel.Text = sourceLabel
+
+	if imageUri ~= "" then
+		refs.previewImage.Image = imageUri
+		refs.previewImage.Visible = true
+		refs.previewText.Visible = false
+	else
+		refs.previewImage.Image = ""
+		refs.previewImage.Visible = false
+		refs.previewText.Text = "No icon available"
+		refs.previewText.Visible = true
+	end
+end
+
+local function updateSelection(statusId)
+	state.selectedStatusId = statusId
+	plugin:SetSetting(SELECTED_STATUS_SETTING, statusId)
+
+	for entrySkillId, row in pairs(state.statusRows) do
+		local active = entrySkillId == statusId
+		row.Root.BackgroundColor3 = if active
+			then Color3.fromRGB(74, 96, 150)
+			else Color3.fromRGB(33, 39, 52)
+		row.NameLabel.TextColor3 = if active
+			then Color3.fromRGB(255, 255, 255)
+			else Color3.fromRGB(229, 235, 247)
+		row.IdLabel.TextColor3 = if active
+			then Color3.fromRGB(228, 236, 255)
+			else Color3.fromRGB(140, 154, 184)
+		row.AssetLabel.TextColor3 = if active
+			then Color3.fromRGB(255, 220, 160)
+			else Color3.fromRGB(205, 170, 118)
+	end
+
+	updatePreview()
+end
+
+local function matchesSearch(status, searchText)
+	if searchText == "" then
+		return true
+	end
+
+	local loweredSearch = string.lower(searchText)
+	return string.find(string.lower(status.displayName), loweredSearch, 1, true) ~= nil
+		or string.find(string.lower(status.statusId), loweredSearch, 1, true) ~= nil
+end
+
+local function rebuildStatusList()
+	if refs.statusList == nil then
+		return
+	end
+
+	for _, child in ipairs(refs.statusList:GetChildren()) do
+		if child:IsA("GuiObject") and child.Name ~= "Layout" then
+			child:Destroy()
+		end
+	end
+	state.statusRows = {}
+
+	local layoutOrder = 0
+	for _, status in ipairs(state.statuses) do
+		if matchesSearch(status, state.searchText) then
+			layoutOrder += 1
+			local row = Instance.new("TextButton")
+			row.Name = status.statusId
+			row.LayoutOrder = layoutOrder
+			row.Size = UDim2.new(1, 0, 0, 58)
+			row.AutoButtonColor = true
+			row.BorderSizePixel = 0
+			row.BackgroundColor3 = Color3.fromRGB(33, 39, 52)
+			row.Text = ""
+			row.Parent = refs.statusList
+
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UDim.new(0, 8)
+			corner.Parent = row
+
+			local padding = Instance.new("UIPadding")
+			padding.PaddingTop = UDim.new(0, 7)
+			padding.PaddingBottom = UDim.new(0, 7)
+			padding.PaddingLeft = UDim.new(0, 10)
+			padding.PaddingRight = UDim.new(0, 10)
+			padding.Parent = row
+
+			local nameLabel = Instance.new("TextLabel")
+			nameLabel.Name = "Name"
+			nameLabel.BackgroundTransparency = 1
+			nameLabel.Size = UDim2.new(1, 0, 0, 18)
+			nameLabel.Font = Enum.Font.GothamBold
+			nameLabel.TextSize = 13
+			nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+			nameLabel.TextColor3 = Color3.fromRGB(229, 235, 247)
+			nameLabel.Text = status.displayName
+			nameLabel.Parent = row
+
+			local idLabel = Instance.new("TextLabel")
+			idLabel.Name = "Id"
+			idLabel.BackgroundTransparency = 1
+			idLabel.Position = UDim2.fromOffset(0, 20)
+			idLabel.Size = UDim2.new(1, 0, 0, 14)
+			idLabel.Font = Enum.Font.Code
+			idLabel.TextSize = 11
+			idLabel.TextXAlignment = Enum.TextXAlignment.Left
+			idLabel.TextColor3 = Color3.fromRGB(140, 154, 184)
+			idLabel.Text = status.statusId
+			idLabel.Parent = row
+
+			local assetLabel = Instance.new("TextLabel")
+			assetLabel.Name = "Asset"
+			assetLabel.BackgroundTransparency = 1
+			assetLabel.AnchorPoint = Vector2.new(1, 1)
+			assetLabel.Position = UDim2.new(1, 0, 1, 0)
+			assetLabel.Size = UDim2.new(0.52, 0, 0, 14)
+			assetLabel.Font = Enum.Font.GothamMedium
+			assetLabel.TextSize = 11
+			assetLabel.TextXAlignment = Enum.TextXAlignment.Right
+			assetLabel.TextColor3 = Color3.fromRGB(205, 170, 118)
+			local effectiveAssetId, sourceLabel = getEffectiveAssetId(status)
+			assetLabel.Text = string.format("%s: %s", sourceLabel, assetIdToDisplay(effectiveAssetId))
+			assetLabel.Parent = row
+
+			row.Activated:Connect(function()
+				updateSelection(status.statusId)
+			end)
+
+			state.statusRows[status.statusId] = {
+				Root = row,
+				NameLabel = nameLabel,
+				IdLabel = idLabel,
+				AssetLabel = assetLabel,
+			}
+		end
+	end
+
+	if layoutOrder == 0 then
+		local emptyLabel = Instance.new("TextLabel")
+		emptyLabel.Name = "Empty"
+		emptyLabel.LayoutOrder = 1
+		emptyLabel.Size = UDim2.new(1, 0, 0, 30)
+		emptyLabel.BackgroundTransparency = 1
+		emptyLabel.Font = Enum.Font.Gotham
+		emptyLabel.TextSize = 13
+		emptyLabel.TextColor3 = Color3.fromRGB(150, 161, 184)
+		emptyLabel.Text = "No statuses match the current search."
+		emptyLabel.Parent = refs.statusList
+	end
+
+	local selectedStatusId = state.selectedStatusId
+	if getStatusById(selectedStatusId) == nil then
+		selectedStatusId = state.statuses[1] and state.statuses[1].statusId or nil
+	end
+	updateSelection(selectedStatusId)
 end
 
 local function getOrCreateOverridesModule()
@@ -163,386 +464,40 @@ local function getOrCreateOverridesModule()
 	return moduleScript
 end
 
-local function persistOverridesToStudio(bindingsBySkillId)
-	local moduleScript = getOrCreateOverridesModule()
-	local source = buildEntriesSource(bindingsBySkillId)
-	local ok, result = pcall(function()
-		ChangeHistoryService:SetWaypoint("BeforeStudioSkillAssetOverrides")
-		ScriptEditorService:UpdateSourceAsync(moduleScript, function(_oldSource)
-			return source
-		end)
-		ChangeHistoryService:SetWaypoint("AfterStudioSkillAssetOverrides")
-	end)
-
-	if not ok then
-		return false, result
-	end
-
-	return true
-end
-
-local function setStatus(text)
-	state.statusText = text
-	if refs.statusLabel ~= nil then
-		refs.statusLabel.Text = text
-	end
-end
-
-local function findProjectModules()
-	local shared = ReplicatedStorage:FindFirstChild("Shared")
-	if shared == nil then
-		return nil, "ReplicatedStorage.Shared was not found. Start Rojo sync first."
-	end
-
-	local config = shared:FindFirstChild("Config")
-	if config == nil then
-		return nil, "ReplicatedStorage.Shared.Config was not found."
-	end
-
-	local combat = config:FindFirstChild("Combat")
-	local assets = config:FindFirstChild("Assets")
-	if combat == nil then
-		return nil, "ReplicatedStorage.Shared.Config.Combat was not found."
-	end
-	if assets == nil then
-		return nil, "ReplicatedStorage.Shared.Config.Assets was not found. Sync the latest repo changes."
-	end
-
-	local skillDefinitionsModule = combat:FindFirstChild("SkillDefinitions")
-	local skillEntriesModule = assets:FindFirstChild("SkillAssetEntries")
-	local imageDefaultsModule = assets:FindFirstChild("ImageDefaults")
-	if skillDefinitionsModule == nil then
-		return nil, "Combat.SkillDefinitions module was not found."
-	end
-	if skillEntriesModule == nil then
-		return nil, "Assets.SkillAssetEntries module was not found."
-	end
-	if imageDefaultsModule == nil then
-		return nil, "Assets.ImageDefaults module was not found. Sync the latest repo changes."
-	end
-
-	return {
-		skillDefinitionsModule = skillDefinitionsModule,
-		projectSkillEntriesModule = skillEntriesModule,
-		imageDefaultsModule = imageDefaultsModule,
-	}
-end
-
-local function readBindings(moduleScript)
-	if moduleScript == nil then
-		return {}, nil
-	end
-
-	local ok, bindings = pcall(require, moduleScript)
-	if not ok then
-		return nil, string.format("Failed to load %s: %s", moduleScript.Name, tostring(bindings))
-	end
-
-	if type(bindings) ~= "table" then
-		return nil, string.format("%s must return a table.", moduleScript.Name)
-	end
-
-	local normalized = {}
-	for skillId, entry in pairs(bindings) do
-		if type(skillId) == "string" and skillId ~= "" then
-			if type(entry) == "table" then
-				if entry.iconAssetId ~= nil then
-					normalized[skillId] = entry.iconAssetId
-				end
-			elseif entry ~= nil then
-				normalized[skillId] = entry
-			end
-		end
-	end
-
-	return normalized, nil
-end
-
-local function readSkills(skillDefinitionsModule)
-	local ok, registry = pcall(require, skillDefinitionsModule)
-	if not ok then
-		return nil, string.format("Failed to load SkillDefinitions: %s", tostring(registry))
-	end
-
-	if type(registry) ~= "table" or type(registry.list) ~= "function" then
-		return nil, "SkillDefinitions did not return a registry API."
-	end
-
-	local skills = {}
-	for _, definition in ipairs(registry.list()) do
-		table.insert(skills, {
-			skillId = definition.skillId,
-			displayName = definition.displayName,
-			fallbackIconAssetId = definition.iconAssetId,
-		})
-	end
-
-	table.sort(skills, function(left, right)
-		if left.displayName == right.displayName then
-			return left.skillId < right.skillId
-		end
-		return left.displayName < right.displayName
-	end)
-
-	return skills, nil
-end
-
-local function readPlaceholderImageAssetId(imageDefaultsModule)
-	local ok, imageDefaults = pcall(require, imageDefaultsModule)
-	if not ok or type(imageDefaults) ~= "table" then
-		return nil
-	end
-
-	return imageDefaults.PlaceholderImageAssetId
-end
-
-local function getSkillById(skillId)
-	for _, skill in ipairs(state.skills) do
-		if skill.skillId == skillId then
-			return skill
-		end
-	end
-
-	return nil
-end
-
-local function getEffectiveAssetId(skill)
-	local overrideAssetId = state.overrideBindingsBySkillId[skill.skillId]
-	if overrideAssetId ~= nil then
-		return overrideAssetId, "Studio override"
-	end
-
-	local projectAssetId = state.projectBindingsBySkillId[skill.skillId]
-	if projectAssetId ~= nil then
-		return projectAssetId, "Project binding"
-	end
-
-	if skill.fallbackIconAssetId ~= nil then
-		return skill.fallbackIconAssetId, "Definition fallback"
-	end
-
-	return state.placeholderImageAssetId, "Global placeholder"
-end
-
-local function updatePreview()
-	if refs.previewImage == nil or refs.previewText == nil then
-		return
-	end
-
-	local skill = getSkillById(state.selectedSkillId)
-	if skill == nil then
-		refs.previewImage.Image = ""
-		refs.previewImage.Visible = false
-		refs.previewText.Text = "Select a skill"
-		refs.previewText.Visible = true
-		refs.skillNameLabel.Text = "No skill selected"
-		refs.skillIdLabel.Text = "-"
-		refs.assetInput.Text = ""
-		refs.projectValueLabel.Text = "-"
-		refs.fallbackValueLabel.Text = assetIdToDisplay(state.placeholderImageAssetId)
-		refs.sourceValueLabel.Text = "-"
-		return
-	end
-
-	local effectiveAssetId, sourceLabel = getEffectiveAssetId(skill)
-	local projectAssetId = state.projectBindingsBySkillId[skill.skillId]
-	local overrideAssetId = state.overrideBindingsBySkillId[skill.skillId]
-	local imageUri = assetIdToImage(effectiveAssetId)
-
-	refs.skillNameLabel.Text = skill.displayName
-	refs.skillIdLabel.Text = skill.skillId
-	refs.assetInput.Text = assetIdToDisplay(overrideAssetId)
-	refs.projectValueLabel.Text = assetIdToDisplay(projectAssetId)
-	refs.fallbackValueLabel.Text =
-		assetIdToDisplay(skill.fallbackIconAssetId or state.placeholderImageAssetId)
-	refs.sourceValueLabel.Text = sourceLabel
-
-	if imageUri ~= "" then
-		refs.previewImage.Image = imageUri
-		refs.previewImage.Visible = true
-		refs.previewText.Visible = false
-	else
-		refs.previewImage.Image = ""
-		refs.previewImage.Visible = false
-		refs.previewText.Text = "No icon available"
-		refs.previewText.Visible = true
-	end
-end
-
-local function updateSelection(skillId)
-	state.selectedSkillId = skillId
-	plugin:SetSetting(SELECTED_SKILL_SETTING, skillId)
-
-	for entrySkillId, row in pairs(state.skillRows) do
-		local active = entrySkillId == skillId
-		row.Root.BackgroundColor3 = if active
-			then Color3.fromRGB(74, 96, 150)
-			else Color3.fromRGB(33, 39, 52)
-		row.NameLabel.TextColor3 = if active
-			then Color3.fromRGB(255, 255, 255)
-			else Color3.fromRGB(229, 235, 247)
-		row.IdLabel.TextColor3 = if active
-			then Color3.fromRGB(228, 236, 255)
-			else Color3.fromRGB(140, 154, 184)
-		row.AssetLabel.TextColor3 = if active
-			then Color3.fromRGB(255, 220, 160)
-			else Color3.fromRGB(205, 170, 118)
-	end
-
-	updatePreview()
-end
-
-local function matchesSearch(skill, searchText)
-	if searchText == "" then
-		return true
-	end
-
-	local loweredSearch = string.lower(searchText)
-	return string.find(string.lower(skill.displayName), loweredSearch, 1, true) ~= nil
-		or string.find(string.lower(skill.skillId), loweredSearch, 1, true) ~= nil
-end
-
-local function rebuildSkillList()
-	if refs.skillList == nil then
-		return
-	end
-
-	for _, child in ipairs(refs.skillList:GetChildren()) do
-		if child:IsA("GuiObject") and child.Name ~= "Layout" then
-			child:Destroy()
-		end
-	end
-	state.skillRows = {}
-
-	local layoutOrder = 0
-	for _, skill in ipairs(state.skills) do
-		if matchesSearch(skill, state.searchText) then
-			layoutOrder += 1
-			local row = Instance.new("TextButton")
-			row.Name = skill.skillId
-			row.LayoutOrder = layoutOrder
-			row.Size = UDim2.new(1, 0, 0, 58)
-			row.AutoButtonColor = true
-			row.BorderSizePixel = 0
-			row.BackgroundColor3 = Color3.fromRGB(33, 39, 52)
-			row.Text = ""
-			row.Parent = refs.skillList
-
-			local corner = Instance.new("UICorner")
-			corner.CornerRadius = UDim.new(0, 8)
-			corner.Parent = row
-
-			local padding = Instance.new("UIPadding")
-			padding.PaddingTop = UDim.new(0, 7)
-			padding.PaddingBottom = UDim.new(0, 7)
-			padding.PaddingLeft = UDim.new(0, 10)
-			padding.PaddingRight = UDim.new(0, 10)
-			padding.Parent = row
-
-			local nameLabel = Instance.new("TextLabel")
-			nameLabel.Name = "Name"
-			nameLabel.BackgroundTransparency = 1
-			nameLabel.Size = UDim2.new(1, 0, 0, 18)
-			nameLabel.Font = Enum.Font.GothamBold
-			nameLabel.TextSize = 13
-			nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-			nameLabel.TextColor3 = Color3.fromRGB(229, 235, 247)
-			nameLabel.Text = skill.displayName
-			nameLabel.Parent = row
-
-			local idLabel = Instance.new("TextLabel")
-			idLabel.Name = "Id"
-			idLabel.BackgroundTransparency = 1
-			idLabel.Position = UDim2.fromOffset(0, 20)
-			idLabel.Size = UDim2.new(1, 0, 0, 14)
-			idLabel.Font = Enum.Font.Code
-			idLabel.TextSize = 11
-			idLabel.TextXAlignment = Enum.TextXAlignment.Left
-			idLabel.TextColor3 = Color3.fromRGB(140, 154, 184)
-			idLabel.Text = skill.skillId
-			idLabel.Parent = row
-
-			local assetLabel = Instance.new("TextLabel")
-			assetLabel.Name = "Asset"
-			assetLabel.BackgroundTransparency = 1
-			assetLabel.AnchorPoint = Vector2.new(1, 1)
-			assetLabel.Position = UDim2.new(1, 0, 1, 0)
-			assetLabel.Size = UDim2.new(0.52, 0, 0, 14)
-			assetLabel.Font = Enum.Font.GothamMedium
-			assetLabel.TextSize = 11
-			assetLabel.TextXAlignment = Enum.TextXAlignment.Right
-			assetLabel.TextColor3 = Color3.fromRGB(205, 170, 118)
-			local effectiveAssetId, sourceLabel = getEffectiveAssetId(skill)
-			assetLabel.Text = string.format("%s: %s", sourceLabel, assetIdToDisplay(effectiveAssetId))
-			assetLabel.Parent = row
-
-			row.Activated:Connect(function()
-				updateSelection(skill.skillId)
-			end)
-
-			state.skillRows[skill.skillId] = {
-				Root = row,
-				NameLabel = nameLabel,
-				IdLabel = idLabel,
-				AssetLabel = assetLabel,
-			}
-		end
-	end
-
-	if layoutOrder == 0 then
-		local emptyLabel = Instance.new("TextLabel")
-		emptyLabel.Name = "Empty"
-		emptyLabel.LayoutOrder = 1
-		emptyLabel.Size = UDim2.new(1, 0, 0, 30)
-		emptyLabel.BackgroundTransparency = 1
-		emptyLabel.Font = Enum.Font.Gotham
-		emptyLabel.TextSize = 13
-		emptyLabel.TextColor3 = Color3.fromRGB(150, 161, 184)
-		emptyLabel.Text = "No skills match the current search."
-		emptyLabel.Parent = refs.skillList
-	end
-
-	local selectedSkillId = state.selectedSkillId
-	if getSkillById(selectedSkillId) == nil then
-		selectedSkillId = state.skills[1] and state.skills[1].skillId or nil
-	end
-	updateSelection(selectedSkillId)
-end
-
 local function loadProjectState()
 	local projectModules, projectError = findProjectModules()
 	if projectModules == nil then
 		state.projectModules = nil
-		state.skills = {}
-		state.projectBindingsBySkillId = {}
-		state.overrideBindingsBySkillId = {}
+		state.statuses = {}
+		state.projectBindingsByStatusId = {}
+		state.overrideBindingsByStatusId = {}
 		state.placeholderImageAssetId = nil
 		setStatus(projectError)
-		rebuildSkillList()
+		rebuildStatusList()
 		return
 	end
 
-	local skills, skillsError = readSkills(projectModules.skillDefinitionsModule)
-	if skills == nil then
+	local statuses, statusesError = readStatuses(projectModules.statusDefinitionsModule)
+	if statuses == nil then
 		state.projectModules = nil
-		state.skills = {}
-		state.projectBindingsBySkillId = {}
-		state.overrideBindingsBySkillId = {}
+		state.statuses = {}
+		state.projectBindingsByStatusId = {}
+		state.overrideBindingsByStatusId = {}
 		state.placeholderImageAssetId = nil
-		setStatus(skillsError)
-		rebuildSkillList()
+		setStatus(statusesError)
+		rebuildStatusList()
 		return
 	end
 
-	local projectBindingsBySkillId, bindingsError = readBindings(projectModules.projectSkillEntriesModule)
-	if projectBindingsBySkillId == nil then
+	local projectBindingsByStatusId, bindingsError = readBindings(projectModules.projectStatusEntriesModule)
+	if projectBindingsByStatusId == nil then
 		state.projectModules = nil
-		state.skills = skills
-		state.projectBindingsBySkillId = {}
-		state.overrideBindingsBySkillId = {}
+		state.statuses = statuses
+		state.projectBindingsByStatusId = {}
+		state.overrideBindingsByStatusId = {}
 		state.placeholderImageAssetId = nil
 		setStatus(bindingsError)
-		rebuildSkillList()
+		rebuildStatusList()
 		return
 	end
 
@@ -552,36 +507,50 @@ local function loadProjectState()
 		overrideEntriesModule = overridesModule:FindFirstChild(OVERRIDES_MODULE_NAME)
 	end
 
-	local overrideBindingsBySkillId, overridesError = readBindings(overrideEntriesModule)
-	if overrideBindingsBySkillId == nil then
+	local overrideBindingsByStatusId, overridesError = readBindings(overrideEntriesModule)
+	if overrideBindingsByStatusId == nil then
 		state.projectModules = nil
-		state.skills = skills
-		state.projectBindingsBySkillId = projectBindingsBySkillId
-		state.overrideBindingsBySkillId = {}
+		state.statuses = statuses
+		state.projectBindingsByStatusId = projectBindingsByStatusId
+		state.overrideBindingsByStatusId = {}
 		state.placeholderImageAssetId = nil
 		setStatus(overridesError)
-		rebuildSkillList()
+		rebuildStatusList()
 		return
 	end
 
 	state.projectModules = projectModules
-	state.skills = skills
-	state.projectBindingsBySkillId = projectBindingsBySkillId
-	state.overrideBindingsBySkillId = overrideBindingsBySkillId
+	state.statuses = statuses
+	state.projectBindingsByStatusId = projectBindingsByStatusId
+	state.overrideBindingsByStatusId = overrideBindingsByStatusId
 	state.placeholderImageAssetId = readPlaceholderImageAssetId(projectModules.imageDefaultsModule)
-	setStatus(string.format("Loaded %d skills. Saving writes Studio-only overrides.", #skills))
-	rebuildSkillList()
+	setStatus(string.format("Loaded %d statuses. Saving writes Studio-only overrides.", #statuses))
+	rebuildStatusList()
 end
 
 local function saveOverrides()
-	local ok, result = persistOverridesToStudio(state.overrideBindingsBySkillId)
+	if state.projectModules == nil then
+		setStatus("Project modules are unavailable. Sync the Rojo project first.")
+		return
+	end
+
+	local overrideModule = getOrCreateOverridesModule()
+	local source = buildEntriesSource(state.statuses, state.overrideBindingsByStatusId)
+	local ok, result = pcall(function()
+		ChangeHistoryService:SetWaypoint("BeforeStudioStatusAssetOverrides")
+		ScriptEditorService:UpdateSourceAsync(overrideModule, function(_oldSource)
+			return source
+		end)
+		ChangeHistoryService:SetWaypoint("AfterStudioStatusAssetOverrides")
+	end)
+
 	if not ok then
 		setStatus(string.format("Save failed: %s", tostring(result)))
 		return
 	end
 
 	setStatus("Saved Studio override. Play mode should now use this icon inside Studio.")
-	rebuildSkillList()
+	rebuildStatusList()
 	updatePreview()
 end
 
@@ -603,7 +572,7 @@ local title = Instance.new("TextLabel")
 title.BackgroundTransparency = 1
 title.Size = UDim2.new(1, 0, 0, 22)
 title.Font = Enum.Font.GothamBold
-title.Text = "Skill Asset Browser"
+title.Text = "Status Asset Browser"
 title.TextColor3 = Color3.fromRGB(244, 247, 255)
 title.TextSize = 18
 title.TextXAlignment = Enum.TextXAlignment.Left
@@ -614,7 +583,7 @@ subtitle.BackgroundTransparency = 1
 subtitle.Position = UDim2.fromOffset(0, 24)
 subtitle.Size = UDim2.new(1, 0, 0, 18)
 subtitle.Font = Enum.Font.Gotham
-subtitle.Text = "Studio overrides for combat skill icons"
+subtitle.Text = "Studio overrides for combat status icons"
 subtitle.TextColor3 = Color3.fromRGB(154, 167, 196)
 subtitle.TextSize = 13
 subtitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -627,7 +596,7 @@ searchBox.BackgroundColor3 = Color3.fromRGB(31, 37, 49)
 searchBox.BorderSizePixel = 0
 searchBox.ClearTextOnFocus = false
 searchBox.Font = Enum.Font.Gotham
-searchBox.PlaceholderText = "Search by skill name or id"
+searchBox.PlaceholderText = "Search by status name or id"
 searchBox.Text = state.searchText
 searchBox.TextColor3 = Color3.fromRGB(244, 247, 255)
 searchBox.PlaceholderColor3 = Color3.fromRGB(124, 135, 159)
@@ -655,29 +624,29 @@ local leftCorner = Instance.new("UICorner")
 leftCorner.CornerRadius = UDim.new(0, 10)
 leftCorner.Parent = leftPanel
 
-local skillList = Instance.new("ScrollingFrame")
-skillList.Name = "SkillList"
-skillList.Size = UDim2.fromScale(1, 1)
-skillList.BackgroundTransparency = 1
-skillList.BorderSizePixel = 0
-skillList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-skillList.CanvasSize = UDim2.new()
-skillList.ScrollBarThickness = 6
-skillList.Parent = leftPanel
-refs.skillList = skillList
+local statusList = Instance.new("ScrollingFrame")
+statusList.Name = "StatusList"
+statusList.Size = UDim2.fromScale(1, 1)
+statusList.BackgroundTransparency = 1
+statusList.BorderSizePixel = 0
+statusList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+statusList.CanvasSize = UDim2.new()
+statusList.ScrollBarThickness = 6
+statusList.Parent = leftPanel
+refs.statusList = statusList
 
-local skillListPadding = Instance.new("UIPadding")
-skillListPadding.PaddingTop = UDim.new(0, 10)
-skillListPadding.PaddingBottom = UDim.new(0, 10)
-skillListPadding.PaddingLeft = UDim.new(0, 10)
-skillListPadding.PaddingRight = UDim.new(0, 10)
-skillListPadding.Parent = skillList
+local statusListPadding = Instance.new("UIPadding")
+statusListPadding.PaddingTop = UDim.new(0, 10)
+statusListPadding.PaddingBottom = UDim.new(0, 10)
+statusListPadding.PaddingLeft = UDim.new(0, 10)
+statusListPadding.PaddingRight = UDim.new(0, 10)
+statusListPadding.Parent = statusList
 
-local skillListLayout = Instance.new("UIListLayout")
-skillListLayout.Name = "Layout"
-skillListLayout.FillDirection = Enum.FillDirection.Vertical
-skillListLayout.Padding = UDim.new(0, 8)
-skillListLayout.Parent = skillList
+local statusListLayout = Instance.new("UIListLayout")
+statusListLayout.Name = "Layout"
+statusListLayout.FillDirection = Enum.FillDirection.Vertical
+statusListLayout.Padding = UDim.new(0, 8)
+statusListLayout.Parent = statusList
 
 local rightPanel = Instance.new("Frame")
 rightPanel.AnchorPoint = Vector2.new(1, 0)
@@ -707,35 +676,35 @@ local selectionTitle = Instance.new("TextLabel")
 selectionTitle.BackgroundTransparency = 1
 selectionTitle.Size = UDim2.new(1, 0, 0, 20)
 selectionTitle.Font = Enum.Font.GothamBold
-selectionTitle.Text = "Selected Skill"
+selectionTitle.Text = "Selected Status"
 selectionTitle.TextColor3 = Color3.fromRGB(244, 247, 255)
 selectionTitle.TextSize = 14
 selectionTitle.TextXAlignment = Enum.TextXAlignment.Left
 selectionTitle.Parent = rightPanel
 
-local skillNameLabel = Instance.new("TextLabel")
-skillNameLabel.BackgroundTransparency = 1
-skillNameLabel.Size = UDim2.new(1, 0, 0, 18)
-skillNameLabel.Font = Enum.Font.GothamMedium
-skillNameLabel.Text = "No skill selected"
-skillNameLabel.TextColor3 = Color3.fromRGB(221, 228, 244)
-skillNameLabel.TextSize = 13
-skillNameLabel.TextXAlignment = Enum.TextXAlignment.Left
-skillNameLabel.Parent = rightPanel
-refs.skillNameLabel = skillNameLabel
+local statusNameLabel = Instance.new("TextLabel")
+statusNameLabel.BackgroundTransparency = 1
+statusNameLabel.Size = UDim2.new(1, 0, 0, 18)
+statusNameLabel.Font = Enum.Font.GothamMedium
+statusNameLabel.Text = "No status selected"
+statusNameLabel.TextColor3 = Color3.fromRGB(221, 228, 244)
+statusNameLabel.TextSize = 13
+statusNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusNameLabel.Parent = rightPanel
+refs.statusNameLabel = statusNameLabel
 
-local skillIdLabel = Instance.new("TextLabel")
-skillIdLabel.BackgroundTransparency = 1
-skillIdLabel.Size = UDim2.new(1, 0, 0, 28)
-skillIdLabel.Font = Enum.Font.Code
-skillIdLabel.Text = "-"
-skillIdLabel.TextColor3 = Color3.fromRGB(133, 146, 173)
-skillIdLabel.TextSize = 12
-skillIdLabel.TextWrapped = true
-skillIdLabel.TextXAlignment = Enum.TextXAlignment.Left
-skillIdLabel.TextYAlignment = Enum.TextYAlignment.Top
-skillIdLabel.Parent = rightPanel
-refs.skillIdLabel = skillIdLabel
+local statusIdLabel = Instance.new("TextLabel")
+statusIdLabel.BackgroundTransparency = 1
+statusIdLabel.Size = UDim2.new(1, 0, 0, 28)
+statusIdLabel.Font = Enum.Font.Code
+statusIdLabel.Text = "-"
+statusIdLabel.TextColor3 = Color3.fromRGB(133, 146, 173)
+statusIdLabel.TextSize = 12
+statusIdLabel.TextWrapped = true
+statusIdLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusIdLabel.TextYAlignment = Enum.TextYAlignment.Top
+statusIdLabel.Parent = rightPanel
+refs.statusIdLabel = statusIdLabel
 
 local previewFrame = Instance.new("Frame")
 previewFrame.Size = UDim2.new(1, 0, 0, 120)
@@ -899,7 +868,7 @@ infoLabel.Position = UDim2.fromOffset(0, 40)
 infoLabel.Size = UDim2.new(1, 0, 0, 24)
 infoLabel.BackgroundTransparency = 1
 infoLabel.Font = Enum.Font.Gotham
-infoLabel.Text = "These overrides are restored automatically on Studio startup."
+infoLabel.Text = "These overrides are Studio-only. Commit project bindings separately if needed."
 infoLabel.TextColor3 = Color3.fromRGB(160, 172, 196)
 infoLabel.TextSize = 11
 infoLabel.TextWrapped = true
@@ -924,7 +893,7 @@ refs.statusLabel = statusLabel
 searchBox:GetPropertyChangedSignal("Text"):Connect(function()
 	state.searchText = searchBox.Text
 	plugin:SetSetting(SEARCH_SETTING, state.searchText)
-	rebuildSkillList()
+	rebuildStatusList()
 end)
 
 assetInput.FocusLost:Connect(function(enterPressed)
@@ -932,33 +901,33 @@ assetInput.FocusLost:Connect(function(enterPressed)
 		return
 	end
 
-	if state.selectedSkillId == nil then
-		setStatus("Select a skill first.")
+	if state.selectedStatusId == nil then
+		setStatus("Select a status first.")
 		return
 	end
 
-	state.overrideBindingsBySkillId[state.selectedSkillId] = normalizeAssetInput(assetInput.Text)
-	rebuildSkillList()
+	state.overrideBindingsByStatusId[state.selectedStatusId] = normalizeAssetInput(assetInput.Text)
+	rebuildStatusList()
 	updatePreview()
 end)
 
 saveButton.Activated:Connect(function()
-	if state.selectedSkillId == nil then
-		setStatus("Select a skill first.")
+	if state.selectedStatusId == nil then
+		setStatus("Select a status first.")
 		return
 	end
 
-	state.overrideBindingsBySkillId[state.selectedSkillId] = normalizeAssetInput(assetInput.Text)
+	state.overrideBindingsByStatusId[state.selectedStatusId] = normalizeAssetInput(assetInput.Text)
 	saveOverrides()
 end)
 
 clearButton.Activated:Connect(function()
-	if state.selectedSkillId == nil then
-		setStatus("Select a skill first.")
+	if state.selectedStatusId == nil then
+		setStatus("Select a status first.")
 		return
 	end
 
-	state.overrideBindingsBySkillId[state.selectedSkillId] = nil
+	state.overrideBindingsByStatusId[state.selectedStatusId] = nil
 	assetInput.Text = ""
 	saveOverrides()
 end)
@@ -979,9 +948,11 @@ toggleButton.Click:Connect(function()
 end)
 
 loadProjectState()
-if state.selectedSkillId == nil and state.skills[1] ~= nil then
-	updateSelection(state.skills[1].skillId)
+if state.selectedStatusId == nil and state.statuses[1] ~= nil then
+	updateSelection(state.statuses[1].statusId)
 else
-	updateSelection(state.selectedSkillId)
+	updateSelection(state.selectedStatusId)
 end
 updatePreview()
+
+

@@ -41,7 +41,7 @@ function CombatMath.calculateHealing(attackerStats, skillDefinition)
 	return math.max(math.floor(rawHealing + 0.5), 1)
 end
 
-function CombatMath.calculateStatusChance(skillDefinition, targetStats)
+function CombatMath.calculateControlChance(skillDefinition, targetStats)
 	if #skillDefinition.appliedStatusIds == 0 then
 		return 0
 	end

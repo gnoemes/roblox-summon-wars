@@ -7,8 +7,8 @@ return table.freeze({
 		kind = "Active",
 		targetKind = "Enemy",
 		triggerKind = "Manual",
-		cooldownSeconds = 4,
-		damageMultiplier = 1.2,
+		cooldownSeconds = 5,
+		damageMultiplier = 2,
 		healMultiplier = 0,
 		statusApplyChance = 0,
 		appliedStatusIds = {},
@@ -62,6 +62,7 @@ return table.freeze({
 			canCrit = true,
 			canMiss = true,
 			ignoresSilence = false,
+			hitsAllTargets = true,
 		},
 	}),
 	SkillDefinition.new({

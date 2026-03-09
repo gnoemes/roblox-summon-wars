@@ -39,7 +39,13 @@ local POPUP_HOLD_TIME = 0.24
 local POPUP_FADE_IN_TIME = 0.08
 local POPUP_FADE_OUT_TIME = 0.14
 local POPUP_LIFETIME = POPUP_RISE_TIME + POPUP_HOLD_TIME + POPUP_FADE_OUT_TIME
-local FIGHTER_VIEW_SIZE = Vector3.new(1.85, 2.2, 1.85)
+local DAMAGE_POPUP_FADE_IN_TIME = 0.06
+local DAMAGE_POPUP_HOLD_TIME = 0.16
+local DAMAGE_POPUP_FADE_OUT_TIME = 0.2
+local DAMAGE_POPUP_LIFETIME = DAMAGE_POPUP_FADE_IN_TIME
+	+ DAMAGE_POPUP_HOLD_TIME
+	+ DAMAGE_POPUP_FADE_OUT_TIME
+local FIGHTER_VIEW_SIZE = Vector3.new(1.85, 2.62, 1.85)
 local ENEMY_VIEW_SIZE = Vector3.new(5.4, 6.1, 5.4)
 
 local SandboxController = {}
@@ -86,6 +92,73 @@ local function getBarColor(ratio)
 	return Color3.fromRGB(232, 96, 96)
 end
 
+local function getSkillIconImage(skillId)
+	return AssetUri.fromAssetId(AssetConfig.SkillAssetResolver.getIconAssetId(skillId))
+end
+
+local function getStatusIconImage(statusId)
+	return AssetUri.fromAssetId(AssetConfig.StatusAssetResolver.getIconAssetId(statusId))
+end
+
+local function getDamagePopupStyle(result)
+	if result == nil then
+		return nil
+	end
+
+	local targetKind = if result.target ~= nil then result.target.kind else nil
+	if result.healingDone > 0 then
+		return {
+			text = string.format("+%d", result.healingDone),
+			color = Color3.fromRGB(111, 214, 132),
+			startOffset = Vector3.new(-0.8, 2.45, 0),
+			endOffset = Vector3.new(-1.05, 3.2, 0),
+			textSize = 21,
+			billboardSize = Vector2.new(92, 34),
+		}
+	end
+
+	if result.damageDealt <= 0 then
+		return nil
+	end
+
+	local isEnemyTarget = targetKind == "Enemy"
+	local baseTextSize = if isEnemyTarget then 30 else 21
+	local critTextSize = if isEnemyTarget then 34 else 24
+	local billboardSize = if isEnemyTarget then Vector2.new(132, 48) else Vector2.new(92, 34)
+
+	if result.actionType == "StatusTick" then
+		return {
+			text = string.format("-%d", result.damageDealt),
+			color = Color3.fromRGB(232, 96, 96),
+			startOffset = if isEnemyTarget
+				then Vector3.new(3.05, 1.34, 0)
+				else Vector3.new(1.55, 1.52, 0),
+			endOffset = if isEnemyTarget
+				then Vector3.new(3.42, 0.44, 0)
+				else Vector3.new(1.82, 0.7, 0),
+			textSize = baseTextSize,
+			billboardSize = if isEnemyTarget then Vector2.new(176, 48) else Vector2.new(116, 34),
+			iconImage = getStatusIconImage(result.skillId),
+			iconSize = if isEnemyTarget then 22 else 18,
+		}
+	end
+
+	local baseColor = if result.criticalHit
+		then Color3.fromRGB(244, 170, 84)
+		else if isEnemyTarget
+			then Color3.fromRGB(244, 247, 255)
+			else Color3.fromRGB(232, 96, 96)
+
+	return {
+		text = tostring(result.damageDealt),
+		color = baseColor,
+		startOffset = Vector3.new(0.82, 1.9, 0),
+		endOffset = Vector3.new(1.04, 1.05, 0),
+		textSize = if result.criticalHit then critTextSize else baseTextSize,
+		billboardSize = billboardSize,
+	}
+end
+
 local function getSkillLabel(skillId, actionType)
 	local definition = tryGet(CombatConfig.SkillDefinitions, skillId)
 	if definition ~= nil then
@@ -101,10 +174,6 @@ local function getSkillLabel(skillId, actionType)
 	end
 
 	return tostring(actionType or skillId or "Skill")
-end
-
-local function getSkillIconImage(skillId)
-	return AssetUri.fromAssetId(AssetConfig.SkillAssetResolver.getIconAssetId(skillId))
 end
 
 local function getOutcomeLabel(outcome)
@@ -185,6 +254,130 @@ local function createHealthBar(parent)
 	}
 end
 
+local function createStatusStrip(parent, maxIcons)
+	local frame = Instance.new("Frame")
+	frame.Name = "StatusStrip"
+	frame.Size = UDim2.new(1, 0, 0, 38)
+	frame.BackgroundTransparency = 1
+	frame.Visible = false
+	frame.Parent = parent
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Padding = UDim.new(0, 7)
+	layout.Parent = frame
+
+	return {
+		root = frame,
+		layout = layout,
+		slots = {},
+		maxIcons = maxIcons or 4,
+	}
+end
+
+local function ensureStatusSlot(strip, index)
+	local slot = strip.slots[index]
+	if slot ~= nil then
+		return slot
+	end
+
+	slot = {}
+	local frame = Instance.new("Frame")
+	frame.Name = string.format("Status%d", index)
+	frame.LayoutOrder = index
+	frame.Size = UDim2.fromOffset(36, 36)
+	frame.BackgroundTransparency = 1
+	frame.Visible = false
+	frame.Parent = strip.root
+
+	local image = Instance.new("ImageLabel")
+	image.AnchorPoint = Vector2.new(0.5, 0.5)
+	image.Position = UDim2.fromScale(0.5, 0.5)
+	image.Size = UDim2.fromOffset(34, 34)
+	image.BackgroundTransparency = 1
+	image.ScaleType = Enum.ScaleType.Fit
+	image.Parent = frame
+
+	local stack = Instance.new("TextLabel")
+	stack.AnchorPoint = Vector2.new(1, 1)
+	stack.Position = UDim2.new(1, 2, 1, 2)
+	stack.Size = UDim2.fromOffset(22, 16)
+	stack.BackgroundTransparency = 1
+	stack.Font = Enum.Font.GothamBold
+	stack.TextColor3 = Color3.fromRGB(244, 247, 255)
+	stack.TextSize = 13
+	stack.TextXAlignment = Enum.TextXAlignment.Right
+	stack.TextYAlignment = Enum.TextYAlignment.Bottom
+	stack.Parent = frame
+
+	slot.frame = frame
+	slot.image = image
+	slot.stack = stack
+	strip.slots[index] = slot
+	return slot
+end
+
+local function getSortedStatusEntries(activeStatuses)
+	local entries = {}
+	for statusId, statusState in pairs(activeStatuses or {}) do
+		table.insert(entries, {
+			statusId = statusId,
+			statusState = statusState,
+		})
+	end
+
+	table.sort(entries, function(left, right)
+		return left.statusId < right.statusId
+	end)
+
+	return entries
+end
+
+local function syncStatusStrip(strip, activeStatuses, elapsedTime)
+	if strip == nil then
+		return
+	end
+
+	local entries = getSortedStatusEntries(activeStatuses)
+	local visibleCount = math.min(#entries, strip.maxIcons)
+	local pulseTime = os.clock()
+
+	for index = 1, visibleCount do
+		local entry = entries[index]
+		local slot = ensureStatusSlot(strip, index)
+		local definition = tryGet(CombatConfig.StatusDefinitions, entry.statusId)
+		local iconImage = getStatusIconImage(entry.statusId)
+		local durationSeconds = if definition ~= nil
+				and definition.baseDurationSeconds ~= nil
+			then definition.baseDurationSeconds
+			else 1
+		local remainingSeconds = if type(entry.statusState.expiresAt) == "number"
+			then math.max(entry.statusState.expiresAt - (elapsedTime or 0), 0)
+			else durationSeconds
+		local remainingRatio = math.clamp(remainingSeconds / math.max(durationSeconds, 0.01), 0, 1)
+		local pulseStrength = 0.14 + (1 - remainingRatio) * 0.34
+		local pulseSpeed = 5.5 + (1 - remainingRatio) * 8.5
+		local pulse = (math.sin(pulseTime * pulseSpeed + index * 0.7) * 0.5 + 0.5)
+		local pulseScale = 1 + pulse * (0.03 + (1 - remainingRatio) * 0.08)
+
+		slot.frame.Visible = true
+		slot.image.Image = iconImage or ""
+		slot.image.Size = UDim2.fromOffset(34 * pulseScale, 34 * pulseScale)
+		slot.image.ImageTransparency = 0.01 + pulse * pulseStrength
+		slot.stack.Text = string.format("x%d", math.max(entry.statusState.stacks or 1, 1))
+		slot.stack.TextTransparency = 0.05 + pulse * 0.3
+	end
+
+	for index = visibleCount + 1, #strip.slots do
+		strip.slots[index].frame.Visible = false
+	end
+
+	strip.root.Visible = visibleCount > 0
+end
+
 local function createWorldView(folder, name, width, height, withBillboard)
 	local part = Instance.new("Part")
 	part.Name = name
@@ -201,6 +394,7 @@ local function createWorldView(folder, name, width, height, withBillboard)
 	local billboard = nil
 	local nameLabel = nil
 	local healthBar = nil
+	local statusStrip = nil
 
 	if withBillboard ~= false then
 		billboard = Instance.new("BillboardGui")
@@ -209,48 +403,50 @@ local function createWorldView(folder, name, width, height, withBillboard)
 		billboard.LightInfluence = 0
 		billboard.MaxDistance = 120
 		billboard.Size = UDim2.fromOffset(width, height)
-		billboard.StudsOffsetWorldSpace = Vector3.new(0, 2.9, 0)
+		billboard.StudsOffsetWorldSpace = Vector3.new(0, 1.85, 0)
 		billboard.Parent = part
 
 		local container = Instance.new("Frame")
 		container.Name = "Container"
 		container.Size = UDim2.fromScale(1, 1)
-		container.BackgroundColor3 = Color3.fromRGB(12, 15, 24)
-		container.BackgroundTransparency = 0.18
+		container.BackgroundTransparency = 1
 		container.BorderSizePixel = 0
 		container.Parent = billboard
 
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 8)
-		corner.Parent = container
-
 		local padding = Instance.new("UIPadding")
-		padding.PaddingTop = UDim.new(0, 6)
-		padding.PaddingBottom = UDim.new(0, 6)
-		padding.PaddingLeft = UDim.new(0, 6)
-		padding.PaddingRight = UDim.new(0, 6)
+		padding.PaddingTop = UDim.new(0, 2)
+		padding.PaddingBottom = UDim.new(0, 2)
+		padding.PaddingLeft = UDim.new(0, 4)
+		padding.PaddingRight = UDim.new(0, 4)
 		padding.Parent = container
 
 		local layout = Instance.new("UIListLayout")
 		layout.FillDirection = Enum.FillDirection.Vertical
+		layout.SortOrder = Enum.SortOrder.LayoutOrder
 		layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 		layout.VerticalAlignment = Enum.VerticalAlignment.Top
-		layout.Padding = UDim.new(0, 3)
+		layout.Padding = UDim.new(0, 2)
 		layout.Parent = container
 
 		nameLabel = Instance.new("TextLabel")
 		nameLabel.Name = "Name"
-		nameLabel.Size = UDim2.new(1, 0, 0, 16)
+		nameLabel.LayoutOrder = 1
+		nameLabel.Size = UDim2.new(1, 0, 0, 15)
 		nameLabel.BackgroundTransparency = 1
 		nameLabel.Font = Enum.Font.GothamBold
 		nameLabel.TextColor3 = Color3.fromRGB(244, 247, 255)
+		nameLabel.TextStrokeTransparency = 0.4
 		nameLabel.TextSize = 12
 		nameLabel.Text = name
 		nameLabel.Parent = container
 
 		healthBar = createHealthBar(container)
+		healthBar.root.LayoutOrder = 2
 		healthBar.root.Size = UDim2.new(1, 0, 0, 11)
 		healthBar.label.TextSize = 10
+
+		statusStrip = createStatusStrip(container, 4)
+		statusStrip.root.LayoutOrder = 3
 	end
 
 	return {
@@ -258,6 +454,8 @@ local function createWorldView(folder, name, width, height, withBillboard)
 		billboard = billboard,
 		nameLabel = nameLabel,
 		healthBar = healthBar,
+		statusStrip = statusStrip,
+		_healthAlpha = 0,
 	}
 end
 
@@ -296,6 +494,7 @@ function SandboxController.new(config)
 		_enemyButtons = {},
 		_speedButtons = {},
 		_processedActionIds = {},
+		_processedValueResultIds = {},
 		_lastEncounterId = nil,
 		_currentCombatAnchor = nil,
 		_preloadedSkillIcons = {},
@@ -499,6 +698,11 @@ function SandboxController:_renderEnemyHeader(snapshot)
 	self._enemyHeader.fill.Size = UDim2.fromScale(ratio, 1)
 	self._enemyHeader.fill.BackgroundColor3 = getBarColor(ratio)
 	self._enemyHeader.value.Text = string.format("%d / %d", enemy.currentHp or 0, enemy.maxHp or 0)
+	syncStatusStrip(
+		self._enemyHeader.statusStrip,
+		enemy.activeStatuses or {},
+		snapshot.elapsedTime or 0
+	)
 end
 
 function SandboxController:_renderPanel(snapshot)
@@ -533,7 +737,7 @@ function SandboxController:_ensureWorldViews(snapshot)
 		local view = self._fighterViews[index]
 		if view == nil then
 			view =
-				createWorldView(self._worldFolder, string.format("Fighter%d", index), 136, 42, true)
+				createWorldView(self._worldFolder, string.format("Fighter%d", index), 132, 66, true)
 			self._fighterViews[index] = view
 		end
 
@@ -572,7 +776,19 @@ function SandboxController:_getRootPart()
 	return character:FindFirstChild("HumanoidRootPart")
 end
 
-function SandboxController:_updateView(view, position, size, color, title, currentHp, maxHp)
+function SandboxController:_updateView(
+	view,
+	position,
+	size,
+	color,
+	title,
+	nameColor,
+	currentHp,
+	maxHp,
+	activeStatuses,
+	elapsedTime,
+	showHealthBar
+)
 	view.part.Size = size
 	view.part.CFrame = CFrame.new(position + Vector3.new(0, size.Y * 0.5, 0))
 	view.part.Color = color
@@ -583,6 +799,7 @@ function SandboxController:_updateView(view, position, size, color, title, curre
 	end
 	if view.nameLabel ~= nil then
 		view.nameLabel.Text = title
+		view.nameLabel.TextColor3 = nameColor or Color3.fromRGB(244, 247, 255)
 	end
 
 	if view.healthBar ~= nil then
@@ -590,7 +807,20 @@ function SandboxController:_updateView(view, position, size, color, title, curre
 		view.healthBar.fill.Size = UDim2.fromScale(ratio, 1)
 		view.healthBar.fill.BackgroundColor3 = getBarColor(ratio)
 		view.healthBar.label.Text = string.format("%d / %d", currentHp, maxHp)
+
+		local targetAlpha = if showHealthBar then 0 else 1
+		view._healthAlpha = view._healthAlpha or targetAlpha
+		view._healthAlpha += (targetAlpha - view._healthAlpha) * 0.22
+		if math.abs(targetAlpha - view._healthAlpha) < 0.02 then
+			view._healthAlpha = targetAlpha
+		end
+
+		view.healthBar.root.BackgroundTransparency = 0.08 + view._healthAlpha * 0.92
+		view.healthBar.fill.BackgroundTransparency = view._healthAlpha
+		view.healthBar.label.TextTransparency = view._healthAlpha
 	end
+
+	syncStatusStrip(view.statusStrip, activeStatuses or {}, elapsedTime or 0)
 end
 
 function SandboxController:_resolveEnemyAnchor(rootPart, mode, encounterId)
@@ -656,8 +886,14 @@ function SandboxController:_updateWorld(snapshot)
 			FIGHTER_VIEW_SIZE,
 			getGradeColor(fighter.grade),
 			fighter.displayName,
+			getGradeColor(fighter.grade),
 			math.floor((fighter.currentHp or 0) + 0.5),
-			math.floor((fighter.maxHp or 0) + 0.5)
+			math.floor((fighter.maxHp or 0) + 0.5),
+			fighter.activeStatuses,
+			snapshot.elapsedTime,
+			snapshot.mode == "CombatEncounter"
+				or math.floor((fighter.currentHp or 0) + 0.5)
+					< math.floor((fighter.maxHp or 0) + 0.5)
 		)
 	end
 
@@ -668,8 +904,12 @@ function SandboxController:_updateWorld(snapshot)
 			ENEMY_VIEW_SIZE,
 			getEnemyColor(snapshot.enemy.tier),
 			snapshot.enemy.displayName,
+			Color3.fromRGB(244, 247, 255),
 			math.floor((snapshot.enemy.currentHp or 0) + 0.5),
-			math.floor((snapshot.enemy.maxHp or 0) + 0.5)
+			math.floor((snapshot.enemy.maxHp or 0) + 0.5),
+			snapshot.enemy.activeStatuses,
+			snapshot.elapsedTime,
+			true
 		)
 	elseif self._enemyView ~= nil then
 		self._enemyView.part.Transparency = 1
@@ -705,6 +945,16 @@ function SandboxController:_preloadSkillIcons()
 	for _, definition in ipairs(CombatConfig.SkillDefinitions.list()) do
 		local imageUri =
 			AssetUri.fromAssetId(AssetConfig.SkillAssetResolver.getIconAssetId(definition.skillId))
+		if imageUri ~= nil and self._preloadedSkillIcons[imageUri] ~= true then
+			self._preloadedSkillIcons[imageUri] = true
+			table.insert(contentIds, imageUri)
+		end
+	end
+
+	for _, definition in ipairs(CombatConfig.StatusDefinitions.list()) do
+		local imageUri = AssetUri.fromAssetId(
+			AssetConfig.StatusAssetResolver.getIconAssetId(definition.statusId)
+		)
 		if imageUri ~= nil and self._preloadedSkillIcons[imageUri] ~= true then
 			self._preloadedSkillIcons[imageUri] = true
 			table.insert(contentIds, imageUri)
@@ -776,6 +1026,55 @@ function SandboxController:_animateSkillPopup(billboard, visual, transparencyPro
 	end)
 end
 
+function SandboxController:_animateValuePopup(billboard, label, startOffset, endOffset)
+	billboard.StudsOffsetWorldSpace = startOffset
+	label.TextTransparency = 1
+	label.TextStrokeTransparency = 1
+
+	local moveTween = TweenService:Create(
+		billboard,
+		TweenInfo.new(
+			DAMAGE_POPUP_FADE_IN_TIME + DAMAGE_POPUP_HOLD_TIME + DAMAGE_POPUP_FADE_OUT_TIME,
+			Enum.EasingStyle.Quart,
+			Enum.EasingDirection.Out
+		),
+		{
+			StudsOffsetWorldSpace = endOffset,
+		}
+	)
+	local fadeInTween = TweenService:Create(
+		label,
+		TweenInfo.new(DAMAGE_POPUP_FADE_IN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			TextTransparency = 0,
+			TextStrokeTransparency = 0.35,
+		}
+	)
+	local fadeOutTween = TweenService:Create(
+		label,
+		TweenInfo.new(DAMAGE_POPUP_FADE_OUT_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		{
+			TextTransparency = 1,
+			TextStrokeTransparency = 1,
+		}
+	)
+
+	moveTween:Play()
+	fadeInTween:Play()
+
+	task.delay(DAMAGE_POPUP_FADE_IN_TIME + DAMAGE_POPUP_HOLD_TIME, function()
+		if billboard.Parent ~= nil then
+			fadeOutTween:Play()
+		end
+	end)
+
+	task.delay(DAMAGE_POPUP_LIFETIME, function()
+		if billboard.Parent ~= nil then
+			billboard:Destroy()
+		end
+	end)
+end
+
 function SandboxController:_spawnSkillPopup(combatantId, skillId, labelText)
 	local adornee = self:_getPopupParent(combatantId)
 	if adornee == nil then
@@ -823,10 +1122,68 @@ function SandboxController:_spawnSkillPopup(combatantId, skillId, labelText)
 	self:_animateSkillPopup(billboard, visual, transparencyProperty)
 end
 
+function SandboxController:_spawnValuePopup(combatantId, result)
+	local style = getDamagePopupStyle(result)
+	if style == nil then
+		return
+	end
+
+	local adornee = self:_getPopupParent(combatantId)
+	if adornee == nil then
+		return
+	end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "ValuePopup"
+	billboard.AlwaysOnTop = true
+	billboard.LightInfluence = 0
+	billboard.Size = UDim2.fromOffset(style.billboardSize.X, style.billboardSize.Y)
+	billboard.Parent = adornee
+
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BackgroundTransparency = 1
+	frame.Parent = billboard
+
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.Text = style.text
+	label.TextColor3 = style.color
+	label.TextSize = style.textSize
+	label.TextStrokeColor3 = Color3.fromRGB(18, 22, 30)
+	label.TextStrokeTransparency = 1
+	label.Parent = frame
+
+	if style.iconImage ~= nil then
+		label.Size = UDim2.new(1, -(style.iconSize + 8), 1, 0)
+		label.TextXAlignment = Enum.TextXAlignment.Right
+
+		local icon = Instance.new("ImageLabel")
+		icon.AnchorPoint = Vector2.new(1, 0.5)
+		icon.Position = UDim2.fromScale(1, 0.5)
+		icon.Size = UDim2.fromOffset(style.iconSize, style.iconSize)
+		icon.BackgroundTransparency = 1
+		icon.Image = style.iconImage
+		icon.ScaleType = Enum.ScaleType.Fit
+		icon.Parent = frame
+	else
+		label.Size = UDim2.fromScale(1, 1)
+		label.TextXAlignment = Enum.TextXAlignment.Center
+	end
+
+	self:_animateValuePopup(billboard, label, style.startOffset, style.endOffset)
+end
+
 function SandboxController:_processJournalEntries(snapshot)
 	if self._lastEncounterId ~= snapshot.activeEncounterId then
 		self._processedActionIds = {}
+		self._processedValueResultIds = {}
 		self._lastEncounterId = snapshot.activeEncounterId
+	end
+
+	if snapshot.activeEncounterId == nil then
+		return
 	end
 
 	for _, entry in ipairs(snapshot.journalEntries or {}) do
@@ -847,6 +1204,31 @@ function SandboxController:_processJournalEntries(snapshot)
 						result.skillId,
 						getSkillLabel(result.skillId, result.actionType)
 					)
+				end
+			end
+
+			local resultTargetId = nil
+			if result.target ~= nil then
+				resultTargetId = result.target.combatantId
+			elseif result.actor ~= nil then
+				resultTargetId = result.actor.combatantId
+			end
+
+			local resultKey = string.format(
+				"%s:%s:%s",
+				tostring(result.actionId),
+				tostring(result.sequence),
+				tostring(resultTargetId)
+			)
+			if self._processedValueResultIds[resultKey] ~= true then
+				self._processedValueResultIds[resultKey] = true
+
+				if result.damageDealt > 0 and resultTargetId ~= nil then
+					self:_spawnValuePopup(resultTargetId, result)
+				end
+
+				if result.healingDone > 0 and resultTargetId ~= nil then
+					self:_spawnValuePopup(resultTargetId, result)
 				end
 			end
 		end
@@ -885,7 +1267,7 @@ function SandboxController:start()
 	header.Name = "EnemyHeader"
 	header.AnchorPoint = Vector2.new(0.5, 0)
 	header.Position = UDim2.new(0.5, 0, 0, 12)
-	header.Size = UDim2.fromOffset(360, 88)
+	header.Size = UDim2.fromOffset(360, 124)
 	header.BackgroundColor3 = Color3.fromRGB(17, 22, 30)
 	header.BorderSizePixel = 0
 	header.Parent = screenGui
@@ -903,37 +1285,47 @@ function SandboxController:start()
 
 	local headerLayout = Instance.new("UIListLayout")
 	headerLayout.FillDirection = Enum.FillDirection.Vertical
+	headerLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	headerLayout.Padding = UDim.new(0, 6)
 	headerLayout.Parent = header
 
 	local title = Instance.new("TextLabel")
+	title.LayoutOrder = 1
 	title.Size = UDim2.new(1, 0, 0, 22)
 	title.BackgroundTransparency = 1
 	title.Font = Enum.Font.GothamBold
 	title.TextColor3 = Color3.fromRGB(244, 247, 255)
 	title.TextSize = 20
+	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Text = "[Elite] Stone Golem"
 	title.Parent = header
 
 	local bar = createHealthBar(header)
+	bar.root.LayoutOrder = 2
 	bar.root.Size = UDim2.new(1, 0, 0, 16)
 	bar.label.TextSize = 12
 
 	local tag = Instance.new("TextLabel")
-	tag.Size = UDim2.new(1, 0, 0, 18)
+	tag.LayoutOrder = 3
+	tag.Size = UDim2.new(1, 0, 0, 14)
 	tag.BackgroundTransparency = 1
 	tag.Font = Enum.Font.GothamMedium
 	tag.TextColor3 = Color3.fromRGB(178, 188, 210)
 	tag.TextSize = 14
+	tag.TextXAlignment = Enum.TextXAlignment.Left
 	tag.Text = "[Tanky]"
 	tag.Parent = header
 
+	local enemyStatusStrip = createStatusStrip(header, 6)
+	enemyStatusStrip.root.LayoutOrder = 4
+	enemyStatusStrip.layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 	self._enemyHeader = {
 		frame = header,
 		title = title,
 		fill = bar.fill,
 		value = bar.label,
 		tag = tag,
+		statusStrip = enemyStatusStrip,
 	}
 
 	local panel = Instance.new("Frame")

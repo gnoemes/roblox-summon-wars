@@ -12,6 +12,7 @@ export type SkillFlags = {
 	canCrit: boolean,
 	canMiss: boolean,
 	ignoresSilence: boolean,
+	hitsAllTargets: boolean,
 }
 
 export type SkillDefinition = {
@@ -32,6 +33,17 @@ export type SkillDefinition = {
 
 local SkillDefinition = {}
 
+local function normalizeFlags(flags)
+	Contract.assertTable(flags, "SkillDefinition.flags")
+
+	local normalizedFlags = table.clone(flags)
+	if normalizedFlags.hitsAllTargets == nil then
+		normalizedFlags.hitsAllTargets = false
+	end
+
+	return normalizedFlags
+end
+
 local function assertFlags(value, fieldName)
 	Contract.assertTable(value, fieldName)
 	Contract.assertBoolean(value.isBasicAttack, string.format("%s.isBasicAttack", fieldName))
@@ -41,6 +53,7 @@ local function assertFlags(value, fieldName)
 	Contract.assertBoolean(value.canCrit, string.format("%s.canCrit", fieldName))
 	Contract.assertBoolean(value.canMiss, string.format("%s.canMiss", fieldName))
 	Contract.assertBoolean(value.ignoresSilence, string.format("%s.ignoresSilence", fieldName))
+	Contract.assertBoolean(value.hitsAllTargets, string.format("%s.hitsAllTargets", fieldName))
 end
 
 local function assertStatusIds(value, fieldName)
@@ -96,7 +109,7 @@ function SkillDefinition.assert(value, fieldName)
 		string.format("%s.statusApplyChance must be <= 1", fieldName)
 	)
 	assertStatusIds(value.appliedStatusIds, string.format("%s.appliedStatusIds", fieldName))
-	assertFlags(value.flags, string.format("%s.flags", fieldName))
+	assertFlags(normalizeFlags(value.flags), string.format("%s.flags", fieldName))
 
 	if value.kind == "BasicAttack" then
 		assert(
@@ -190,9 +203,11 @@ function SkillDefinition.assert(value, fieldName)
 end
 
 function SkillDefinition.new(data)
-	SkillDefinition.assert(data)
+	local normalizedData = table.clone(data)
+	normalizedData.flags = normalizeFlags(data.flags)
+	SkillDefinition.assert(normalizedData)
 
-	return table.freeze(data)
+	return table.freeze(normalizedData)
 end
 
 return SkillDefinition

@@ -193,6 +193,7 @@
 - Fighter business model / snapshot должен хранить отдельно экипированные активные скиллы через `activeSkillIds`.
 - Если позже появятся rolled/owned skill pools у конкретного бойца, они должны жить в persistent/session model, а не в ECS-компонентах.
 - ECS/runtime combat state должен получать только реально активные способности, cooldowns и другой live state, нужный симуляции.
+- Status application model split is fixed: DoT (`Poison`, `Bleed`, etc.) не должен использовать общий chance-vs-resist pipeline. Control/utility эффекты используют chance/resist; DoT использует target response (`Normal`, `Immune`, `Vulnerable`) из отдельного profile/rules слоя.
 
 ### 6.10 Grade metadata
 - Shared grade metadata lives in `common/src/shared/Progression/Grades/*`.
@@ -209,6 +210,7 @@
 - Studio plugin не должен писать в Rojo-mapped filesystem modules как в primary workflow: Rojo их перетрет. Для локальной полировки plugin должен писать Studio-only overrides в `ReplicatedStorage/StudioAssetOverrides/*`, а runtime в Studio может читать их поверх project bindings.
 - Если ассеты редактируются через Studio plugin, plugin должен менять binding-слой, а не core combat definitions.
 - На клиенте asset ids нужно нормализовать через shared helper (`common/src/shared/Utils/AssetUri.luau`), а не собирать uri строками в каждом presenter.
+
 
 
 

@@ -58,10 +58,11 @@ local function collectEncounterCombatants(world, encounterId)
 	local enemies = {}
 	local all = {}
 
-	for entityId, combatant, stats, runtime, abilities in
+	for entityId, combatant, stats, statusRules, runtime, abilities in
 		world:query(
 			Components.Combatant,
 			Components.CombatantStats,
+			Components.CombatantStatusRules,
 			Components.CombatantRuntime,
 			Components.CombatantAbilities
 		)
@@ -78,6 +79,7 @@ local function collectEncounterCombatants(world, encounterId)
 				order = combatant.order,
 				aggroWeight = combatant.aggroWeight,
 				computedStats = stats.computedStats,
+				dotResponsesByStatusId = statusRules.dotResponsesByStatusId,
 				runtimeState = runtime,
 				basicSkillId = abilities.basicSkillId,
 				specialSkillIds = abilities.specialSkillIds,
@@ -155,26 +157,62 @@ local function decrementCooldowns(runtimeState, deltaTime)
 	}), true
 end
 
-local function selectTargetForSkill(skillDefinition, actor, fighters, enemies, rngState)
-	if skillDefinition.targetKind == "Enemy" then
-		if actor.kind == "Fighter" then
-			return CombatTargeting.selectEnemyTarget(enemies), rngState
+local function collectLivingCombatants(combatants)
+	local living = {}
+
+	for _, combatant in ipairs(combatants) do
+		if combatant.runtimeState.currentHp > 0 then
+			table.insert(living, combatant)
+		end
+	end
+
+	return living
+end
+
+local function selectTargetsForSkill(skillDefinition, actor, fighters, enemies, rngState)
+	if skillDefinition.flags.hitsAllTargets then
+		if skillDefinition.targetKind == "Enemy" then
+			local targets = if actor.kind == "Fighter" then enemies else fighters
+			return collectLivingCombatants(targets), rngState
 		end
 
-		return CombatTargeting.selectFighterTarget(fighters, rngState)
+		if skillDefinition.targetKind == "Ally" then
+			local allies = if actor.kind == "Fighter" then fighters else enemies
+			return collectLivingCombatants(allies), rngState
+		end
+
+		if skillDefinition.targetKind == "Self" then
+			return { actor }, rngState
+		end
+
+		if skillDefinition.targetKind == "None" then
+			return {}, rngState
+		end
+	end
+
+	if skillDefinition.targetKind == "Enemy" then
+		if actor.kind == "Fighter" then
+			local target = CombatTargeting.selectEnemyTarget(enemies)
+			return if target ~= nil then { target } else {}, rngState
+		end
+
+		local target
+		target, rngState = CombatTargeting.selectFighterTarget(fighters, rngState)
+		return if target ~= nil then { target } else {}, rngState
 	end
 
 	if skillDefinition.targetKind == "Self" then
-		return actor, rngState
+		return { actor }, rngState
 	end
 
 	if skillDefinition.targetKind == "Ally" then
 		local allies = if actor.kind == "Fighter" then fighters else enemies
-		return CombatTargeting.selectSupportTarget(allies), rngState
+		local target = CombatTargeting.selectSupportTarget(allies)
+		return if target ~= nil then { target } else {}, rngState
 	end
 
 	if skillDefinition.targetKind == "None" then
-		return nil, rngState
+		return {}, rngState
 	end
 
 	error(string.format("Unsupported target kind %s", tostring(skillDefinition.targetKind)))
@@ -330,42 +368,42 @@ local resolveActionsSystem = ECS.SystemBuilder.server("Simulation", function(wor
 				local actor = readyCombatants[1]
 				local skillDefinition = CombatActionPlanner.selectSkill(actor, actor.runtimeState)
 					or CombatConfig.SkillDefinitions.get(actor.basicSkillId)
-				local target = nil
+				local targets = {}
 				local nextRngState = nextEncounter.rngState
-				target, nextRngState =
-					selectTargetForSkill(skillDefinition, actor, fighters, enemies, nextRngState)
+				targets, nextRngState =
+					selectTargetsForSkill(skillDefinition, actor, fighters, enemies, nextRngState)
 
 				local resolved = CombatActionResolver.resolveAction({
 					encounterId = encounter.encounterId,
 					sequence = nextEncounter.sequence,
 					now = nextEncounter.elapsedTime,
 					actor = actor,
-					target = target,
+					targets = targets,
+					primaryTarget = targets[1],
 					skillDefinition = skillDefinition,
+					statusDefinitions = CombatConfig.StatusDefinitions,
 					rngState = nextRngState,
 				})
 
 				resolved.actorState.nextActionAt = actor.runtimeState.nextActionAt
 					+ actor.computedStats.attackIntervalSeconds
 				patchCombatantRuntime(world, actor, resolved.actorState)
-				if
-					target ~= nil
-					and resolved.targetState ~= nil
-					and target.entityId ~= actor.entityId
-				then
-					patchCombatantRuntime(world, target, resolved.targetState)
+				for _, targetPatch in ipairs(resolved.targetStatePatches) do
+					patchCombatantRuntime(world, targetPatch.combatant, targetPatch.runtimeState)
 				end
 
-				nextEncounter = appendJournalEntry(
-					nextEncounter,
-					Combat.CombatJournalEntry.new({
-						kind = "Action",
-						at = resolved.result.resolvedAt,
-						actionResult = resolved.result,
-					})
-				)
+				for _, result in ipairs(resolved.results) do
+					nextEncounter = appendJournalEntry(
+						nextEncounter,
+						Combat.CombatJournalEntry.new({
+							kind = "Action",
+							at = result.resolvedAt,
+							actionResult = result,
+						})
+					)
+				end
 				nextEncounter = nextEncounter:patch({
-					sequence = nextEncounter.sequence + 1,
+					sequence = nextEncounter.sequence + #resolved.results,
 					rngState = resolved.rngState,
 				})
 				world:insert(encounterEntityId, nextEncounter)

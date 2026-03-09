@@ -3,6 +3,7 @@ return table.freeze({
 	SkillTargetKinds = require(script.SkillTargetKinds),
 	SkillTriggerKinds = require(script.SkillTriggerKinds),
 	StatusKinds = require(script.StatusKinds),
+	DotResponseKinds = require(script.DotResponseKinds),
 	DropEntryKinds = require(script.DropEntryKinds),
 	ContentLoader = require(script.ContentLoader),
 	Fighters = require(script.Fighters),

@@ -1,8 +1,10 @@
 local Contract = require(script.Parent.Parent.Parent.Utils.Contract)
 local ComputedCombatStats = require(script.Parent.Parent.Parent.Stats.ComputedCombatStats)
 local EnemyTierIds = require(script.Parent.Parent.Parent.Enemies.EnemyTierIds)
+local DotResponseKinds = require(script.Parent.DotResponseKinds)
 local DropTables = require(script.Parent.DropTables)
 local SkillDefinitions = require(script.Parent.SkillDefinitions)
+local StatusDefinitions = require(script.Parent.StatusDefinitions)
 
 export type EnemyFlags = {
 	isRare: boolean,
@@ -20,6 +22,7 @@ export type EnemyDefinition = {
 	passiveSkillIds: { string },
 	dropTableId: string,
 	threatTag: string?,
+	dotResponsesByStatusId: { [string]: string }?,
 	flags: EnemyFlags,
 }
 
@@ -52,6 +55,30 @@ local function assertSkillList(skillIds, fieldName, expectedKind)
 				string.format("%s[%d] must reference a passive skill", fieldName, index)
 			)
 		end
+	end
+end
+
+local function assertDotResponses(value, fieldName)
+	if value == nil then
+		return
+	end
+
+	Contract.assertDictionary(value, fieldName)
+	for statusId, responseKind in pairs(value) do
+		assert(
+			StatusDefinitions.has(statusId),
+			string.format("%s references unknown status %s", fieldName, statusId)
+		)
+		local definition = StatusDefinitions.get(statusId)
+		assert(
+			definition.flags.isDamageOverTime,
+			string.format("%s may only configure DamageOverTime statuses", fieldName)
+		)
+		Contract.assertEnumValue(
+			responseKind,
+			DotResponseKinds,
+			string.format("%s.%s", fieldName, statusId)
+		)
 	end
 end
 
@@ -123,6 +150,10 @@ function EnemyDefinition.assert(value, fieldName)
 	)
 	Contract.assertString(value.dropTableId, string.format("%s.dropTableId", fieldName))
 	Contract.assertOptionalString(value.threatTag, string.format("%s.threatTag", fieldName))
+	assertDotResponses(
+		value.dotResponsesByStatusId,
+		string.format("%s.dotResponsesByStatusId", fieldName)
+	)
 	assertFlags(value.flags, string.format("%s.flags", fieldName))
 
 	local basicAttackDefinition = SkillDefinitions.get(value.basicAttackSkillId)

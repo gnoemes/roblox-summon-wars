@@ -24,7 +24,7 @@ local SyntheticScenarioPresets = {
 		table.freeze({
 			fighterId = "Synthetic.Rogue.01",
 			classId = "Rogue",
-			grade = "Rare",
+			grade = "Legendary",
 			level = 10,
 			activeSkillIds = table.freeze({ "Skill.Fighter.RoguePoisonEdge" }),
 			traitId = nil,

@@ -95,6 +95,9 @@ function CombatEncounterService:_spawnEncounter(player, runState)
 			Components.CombatantStats({
 				computedStats = fighter.computedStats,
 			}),
+			Components.CombatantStatusRules({
+				dotResponsesByStatusId = fighter.dotResponsesByStatusId,
+			}),
 			Components.CombatantAbilities({
 				basicSkillId = fighter.basicSkillId,
 				specialSkillIds = fighter.specialSkillIds,
@@ -117,6 +120,9 @@ function CombatEncounterService:_spawnEncounter(player, runState)
 		}),
 		Components.CombatantStats({
 			computedStats = enemy.computedStats,
+		}),
+		Components.CombatantStatusRules({
+			dotResponsesByStatusId = enemy.dotResponsesByStatusId,
 		}),
 		Components.CombatantAbilities({
 			basicSkillId = enemy.basicSkillId,

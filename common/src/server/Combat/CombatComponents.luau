@@ -6,6 +6,7 @@ return table.freeze({
 	Encounter = ECS.component("CombatEncounter"),
 	Combatant = ECS.component("Combatant"),
 	CombatantStats = ECS.component("CombatantStats"),
+	CombatantStatusRules = ECS.component("CombatantStatusRules"),
 	CombatantRuntime = ECS.component("CombatantRuntime"),
 	CombatantAbilities = ECS.component("CombatantAbilities"),
 })

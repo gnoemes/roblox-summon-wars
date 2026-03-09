@@ -211,6 +211,7 @@ function CombatSandboxService:_buildEnemySnapshot(state, debugState)
 		currentHp = currentHp,
 		maxHp = maxHp,
 		hpRatio = if maxHp > 0 then math.clamp(currentHp / maxHp, 0, 1) else 0,
+		activeStatuses = if liveEnemy ~= nil then clone(liveEnemy.activeStatuses) else {},
 	}
 end
 
