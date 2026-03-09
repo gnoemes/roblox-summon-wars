@@ -1,10 +1,13 @@
+local ContentProvider = game:GetService("ContentProvider")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
-local CombatConfig =
-	require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("Combat"))
+local SharedConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local CombatConfig = SharedConfig.Combat
+local AssetConfig = SharedConfig.Assets
 local GradeDefinitions = require(
 	ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Progression"):WaitForChild("Grades")
 ).GradeDefinitions
@@ -13,6 +16,8 @@ local ReplicationTopics = require(
 )
 local Cleaner =
 	require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Utils"):WaitForChild("Cleaner"))
+local AssetUri =
+	require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Utils"):WaitForChild("AssetUri"))
 
 local SNAPSHOT_TOPIC = ReplicationTopics.CombatSandbox
 local FOLLOW_OFFSETS = {
@@ -27,7 +32,13 @@ local COMBAT_OFFSETS = {
 }
 local PREVIEW_DISTANCE = 18
 local WORLD_BASE_Y_OFFSET = -2.6
-local POPUP_LIFETIME = 0.9
+local POPUP_START_OFFSET_Y = 2.4
+local POPUP_END_OFFSET_Y = 3.8
+local POPUP_RISE_TIME = 0.18
+local POPUP_HOLD_TIME = 0.24
+local POPUP_FADE_IN_TIME = 0.08
+local POPUP_FADE_OUT_TIME = 0.14
+local POPUP_LIFETIME = POPUP_RISE_TIME + POPUP_HOLD_TIME + POPUP_FADE_OUT_TIME
 local FIGHTER_VIEW_SIZE = Vector3.new(1.85, 2.2, 1.85)
 local ENEMY_VIEW_SIZE = Vector3.new(5.4, 6.1, 5.4)
 
@@ -90,6 +101,10 @@ local function getSkillLabel(skillId, actionType)
 	end
 
 	return tostring(actionType or skillId or "Skill")
+end
+
+local function getSkillIconImage(skillId)
+	return AssetUri.fromAssetId(AssetConfig.SkillAssetResolver.getIconAssetId(skillId))
 end
 
 local function getOutcomeLabel(outcome)
@@ -283,6 +298,7 @@ function SandboxController.new(config)
 		_processedActionIds = {},
 		_lastEncounterId = nil,
 		_currentCombatAnchor = nil,
+		_preloadedSkillIcons = {},
 	}, SandboxController)
 end
 
@@ -683,7 +699,84 @@ function SandboxController:_getPopupParent(combatantId)
 	return nil
 end
 
-function SandboxController:_spawnSkillPopup(combatantId, labelText)
+function SandboxController:_preloadSkillIcons()
+	local contentIds = {}
+
+	for _, definition in ipairs(CombatConfig.SkillDefinitions.list()) do
+		local imageUri =
+			AssetUri.fromAssetId(AssetConfig.SkillAssetResolver.getIconAssetId(definition.skillId))
+		if imageUri ~= nil and self._preloadedSkillIcons[imageUri] ~= true then
+			self._preloadedSkillIcons[imageUri] = true
+			table.insert(contentIds, imageUri)
+		end
+	end
+
+	if #contentIds == 0 then
+		return
+	end
+
+	task.spawn(function()
+		pcall(function()
+			ContentProvider:PreloadAsync(contentIds)
+		end)
+	end)
+end
+
+function SandboxController:_syncSkillPopupContent(imageLabel, fallbackLabel)
+	local hasImage = imageLabel ~= nil
+	if hasImage then
+		imageLabel.Visible = true
+		imageLabel.ImageTransparency = 1
+		fallbackLabel.Visible = false
+		fallbackLabel.TextTransparency = 1
+		return imageLabel, "ImageTransparency"
+	end
+
+	fallbackLabel.Visible = true
+	fallbackLabel.TextTransparency = 1
+	return fallbackLabel, "TextTransparency"
+end
+
+function SandboxController:_animateSkillPopup(billboard, visual, transparencyProperty)
+	local riseTween = TweenService:Create(
+		billboard,
+		TweenInfo.new(POPUP_RISE_TIME, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+		{
+			StudsOffsetWorldSpace = Vector3.new(0, POPUP_END_OFFSET_Y, 0),
+		}
+	)
+	local fadeInTween = TweenService:Create(
+		visual,
+		TweenInfo.new(POPUP_FADE_IN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			[transparencyProperty] = 0,
+		}
+	)
+	local fadeOutTween = TweenService:Create(
+		visual,
+		TweenInfo.new(POPUP_FADE_OUT_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		{
+			[transparencyProperty] = 1,
+		}
+	)
+
+	riseTween:Play()
+	fadeInTween:Play()
+
+	task.delay(POPUP_RISE_TIME + POPUP_HOLD_TIME, function()
+		if billboard.Parent ~= nil then
+			fadeOutTween:Play()
+		end
+	end)
+
+	task.delay(POPUP_LIFETIME, function()
+		if billboard.Parent ~= nil then
+			billboard:Destroy()
+		end
+	end)
+end
+
+function SandboxController:_spawnSkillPopup(combatantId, skillId, labelText)
 	local adornee = self:_getPopupParent(combatantId)
 	if adornee == nil then
 		return
@@ -693,34 +786,41 @@ function SandboxController:_spawnSkillPopup(combatantId, labelText)
 	billboard.Name = "SkillPopup"
 	billboard.AlwaysOnTop = true
 	billboard.LightInfluence = 0
-	billboard.Size = UDim2.fromOffset(140, 34)
-	billboard.StudsOffsetWorldSpace = Vector3.new(0, 7.2, 0)
+	billboard.Size = UDim2.fromOffset(64, 64)
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, POPUP_START_OFFSET_Y, 0)
 	billboard.Parent = adornee
 
 	local frame = Instance.new("Frame")
 	frame.Size = UDim2.fromScale(1, 1)
-	frame.BackgroundColor3 = Color3.fromRGB(246, 193, 119)
+	frame.BackgroundTransparency = 1
 	frame.BorderSizePixel = 0
 	frame.Parent = billboard
 
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = frame
+	local fallbackLabel = Instance.new("TextLabel")
+	fallbackLabel.Size = UDim2.fromScale(1, 1)
+	fallbackLabel.BackgroundTransparency = 1
+	fallbackLabel.Font = Enum.Font.GothamBold
+	fallbackLabel.TextColor3 = Color3.fromRGB(244, 247, 255)
+	fallbackLabel.TextSize = 12
+	fallbackLabel.TextWrapped = true
+	fallbackLabel.Text = labelText
+	fallbackLabel.Parent = frame
 
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBold
-	label.TextColor3 = Color3.fromRGB(20, 24, 34)
-	label.TextSize = 12
-	label.Text = labelText
-	label.Parent = frame
+	local image = nil
+	local iconImage = getSkillIconImage(skillId)
+	if iconImage ~= nil then
+		image = Instance.new("ImageLabel")
+		image.AnchorPoint = Vector2.new(0.5, 0.5)
+		image.Position = UDim2.fromScale(0.5, 0.5)
+		image.Size = UDim2.fromOffset(50, 50)
+		image.BackgroundTransparency = 1
+		image.Image = iconImage
+		image.ScaleType = Enum.ScaleType.Fit
+		image.Parent = frame
+	end
 
-	task.delay(POPUP_LIFETIME, function()
-		if billboard.Parent ~= nil then
-			billboard:Destroy()
-		end
-	end)
+	local visual, transparencyProperty = self:_syncSkillPopupContent(image, fallbackLabel)
+	self:_animateSkillPopup(billboard, visual, transparencyProperty)
 end
 
 function SandboxController:_processJournalEntries(snapshot)
@@ -744,6 +844,7 @@ function SandboxController:_processJournalEntries(snapshot)
 				if result.actionType == "SpecialSkill" and result.actor ~= nil then
 					self:_spawnSkillPopup(
 						result.actor.combatantId,
+						result.skillId,
 						getSkillLabel(result.skillId, result.actionType)
 					)
 				end
@@ -970,6 +1071,8 @@ function SandboxController:start()
 	logLabel.Parent = scrolling
 	self._logLabel = logLabel
 
+	self:_preloadSkillIcons()
+
 	self._cleaner:add(self._snapshotClient:subscribe(SNAPSHOT_TOPIC, function(envelope)
 		self:_onSnapshot(envelope.payload)
 	end))
@@ -996,6 +1099,7 @@ function SandboxController:stop()
 	self._processedActionIds = {}
 	self._lastEncounterId = nil
 	self._currentCombatAnchor = nil
+	self._preloadedSkillIcons = {}
 end
 
 return SandboxController

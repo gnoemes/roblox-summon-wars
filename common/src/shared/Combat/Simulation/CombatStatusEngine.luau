@@ -170,6 +170,7 @@ function CombatStatusEngine.tickStatuses(context)
 					outcome = "Resolved",
 					hit = true,
 					damageDealt = damage,
+					healingDone = 0,
 					appliedEffectIds = { statusId },
 					defeatedCombatantIds = defeatedIds,
 					resolvedAt = statusState.nextTickAt,

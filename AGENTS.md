@@ -200,4 +200,17 @@
 - System-specific rules for grades должны жить отдельно: например fighter combat scaling в `common/src/shared/Config/Combat/Fighters/GradeModifiers.luau`, а не внутри общего grade registry.
 - Enemy tiers не должны смешиваться с fighter/resource grades; для врагов держать отдельные tier definitions.
 
+### 6.11 Asset workflow
+- Исходные файлы ресурсов, которые нужно хранить для повторной загрузки, живут в корневой папке `raw/`.
+- `raw/` намеренно не должен попадать в Rojo mapping; не добавляй его в `*.project.json`.
+- Runtime/config слой должен ссылаться только на Roblox asset ids, а не на локальные пути.
+- Для UI-иконок skill definitions могут хранить `iconAssetId`; допустимы numeric id и full content-uri (`rbxassetid://...`).
+- Skill-specific asset bindings должны по умолчанию жить в `common/src/shared/Config/Assets/SkillAssetEntries.luau`; это отдельный слой поверх gameplay definitions.
+- Studio plugin не должен писать в Rojo-mapped filesystem modules как в primary workflow: Rojo их перетрет. Для локальной полировки plugin должен писать Studio-only overrides в `ReplicatedStorage/StudioAssetOverrides/*`, а runtime в Studio может читать их поверх project bindings.
+- Если ассеты редактируются через Studio plugin, plugin должен менять binding-слой, а не core combat definitions.
+- На клиенте asset ids нужно нормализовать через shared helper (`common/src/shared/Utils/AssetUri.luau`), а не собирать uri строками в каждом presenter.
+
+
+
+
 

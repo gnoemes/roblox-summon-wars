@@ -173,6 +173,33 @@ function Contract.assertStringIntegerDictionary(value, fieldName)
 	return value
 end
 
+function Contract.assertAssetId(value, fieldName)
+	local valueType = type(value)
+	assert(
+		valueType == "string" or valueType == "number",
+		string.format("%s must be a string or number asset id", formatFieldName(fieldName))
+	)
+
+	if valueType == "string" then
+		assert(
+			value ~= "",
+			string.format("%s must be a non-empty asset id", formatFieldName(fieldName))
+		)
+	else
+		Contract.assertPositiveInteger(value, fieldName)
+	end
+
+	return value
+end
+
+function Contract.assertOptionalAssetId(value, fieldName)
+	if value ~= nil then
+		Contract.assertAssetId(value, fieldName)
+	end
+
+	return value
+end
+
 function Contract.assertEnumValue(value, enumDefinition, fieldName)
 	Contract.assertString(value, fieldName)
 	assert(

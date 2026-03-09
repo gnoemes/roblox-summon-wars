@@ -2,7 +2,7 @@ param()
 
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $Src  = Join-Path $Root "plugins"
-$Dst  = Join-Path $env:LOCALAPPDATA "Roblox\Plugins\IncubatorZero"
+$Dst  = Join-Path $env:LOCALAPPDATA "Roblox\Plugins\Custom"
 
 New-Item -ItemType Directory -Force $Dst | Out-Null
 
