@@ -32,7 +32,60 @@ local function deepClone(value)
 	return cloned
 end
 
-function SyntheticCombatFactory.createRun(player, extractionType, enemyId)
+local function buildDefaultFighterSnapshots()
+	local fighterSnapshots = {}
+
+	for _, spec in ipairs(SyntheticScenarioPresets.DefaultFighterTrio) do
+		table.insert(fighterSnapshots, CombatStatsBuilder.buildFighterSnapshot(spec))
+	end
+
+	table.sort(fighterSnapshots, function(left, right)
+		return left.combatantId < right.combatantId
+	end)
+
+	return fighterSnapshots
+end
+
+local function normalizeFighterSnapshots(runOptions)
+	if
+		type(runOptions) == "table"
+		and type(runOptions.fighterSnapshots) == "table"
+		and #runOptions.fighterSnapshots > 0
+	then
+		local fighterSnapshots = deepClone(runOptions.fighterSnapshots)
+		table.sort(fighterSnapshots, function(left, right)
+			return left.combatantId < right.combatantId
+		end)
+		return fighterSnapshots
+	end
+
+	return buildDefaultFighterSnapshots()
+end
+
+local function buildDerivedFighterData(fighterSnapshots)
+	local fighterMetadataByCombatantId = {}
+	local baseFighterStatesByCombatantId = {}
+
+	for _, snapshot in ipairs(fighterSnapshots) do
+		local classDefinition = ClassDefinitions.get(snapshot.classId)
+		fighterMetadataByCombatantId[snapshot.combatantId] = {
+			combatantId = snapshot.combatantId,
+			displayName = classDefinition.displayName,
+			classId = snapshot.classId,
+			grade = snapshot.grade,
+			level = snapshot.level,
+		}
+		baseFighterStatesByCombatantId[snapshot.combatantId] = {
+			combatantId = snapshot.combatantId,
+			maxHp = snapshot.computedStats.hp,
+			currentHp = snapshot.computedStats.hp,
+		}
+	end
+
+	return fighterMetadataByCombatantId, baseFighterStatesByCombatantId
+end
+
+function SyntheticCombatFactory.createRun(player, extractionType, enemyId, runOptions)
 	local selectedEnemyId = enemyId
 		or SyntheticScenarioPresets.DefaultEnemyIdByExtractionType[extractionType]
 	assert(
@@ -41,30 +94,19 @@ function SyntheticCombatFactory.createRun(player, extractionType, enemyId)
 	)
 	local enemyDefinition = EnemyDefinitions.get(selectedEnemyId)
 	local runInstanceId = string.format("Run:%d:%s", player.UserId, extractionType)
-	local fighterSnapshots = {}
-	local baseFighterStatesByCombatantId = {}
-	local fighterMetadataByCombatantId = {}
+	local fighterSnapshots = normalizeFighterSnapshots(runOptions)
+	assert(#fighterSnapshots == 3, "Synthetic run requires exactly 3 fighter snapshots")
 
-	for _, spec in ipairs(SyntheticScenarioPresets.DefaultFighterTrio) do
-		local snapshot = CombatStatsBuilder.buildFighterSnapshot(spec)
-		local classDefinition = ClassDefinitions.get(snapshot.classId)
-		table.insert(fighterSnapshots, snapshot)
-		baseFighterStatesByCombatantId[snapshot.combatantId] = {
-			combatantId = snapshot.combatantId,
-			maxHp = snapshot.computedStats.hp,
-			currentHp = snapshot.computedStats.hp,
-		}
-		fighterMetadataByCombatantId[snapshot.combatantId] = {
-			combatantId = snapshot.combatantId,
-			displayName = classDefinition.displayName,
-			classId = snapshot.classId,
-			grade = snapshot.grade,
-		}
-	end
-
-	table.sort(fighterSnapshots, function(left, right)
-		return left.combatantId < right.combatantId
-	end)
+	local derivedMetadataByCombatantId, derivedBaseStatesByCombatantId =
+		buildDerivedFighterData(fighterSnapshots)
+	local fighterMetadataByCombatantId = if type(runOptions) == "table"
+			and type(runOptions.fighterMetadataByCombatantId) == "table"
+		then deepClone(runOptions.fighterMetadataByCombatantId)
+		else derivedMetadataByCombatantId
+	local baseFighterStatesByCombatantId = if type(runOptions) == "table"
+			and type(runOptions.baseFighterStatesByCombatantId) == "table"
+		then deepClone(runOptions.baseFighterStatesByCombatantId)
+		else derivedBaseStatesByCombatantId
 
 	return {
 		runInstanceId = runInstanceId,

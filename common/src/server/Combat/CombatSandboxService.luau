@@ -80,6 +80,54 @@ local function buildCombatantLookup(entries)
 	return lookup
 end
 
+local function getCombatantDisplayName(labelsById, combatantId)
+	local label = labelsById[combatantId]
+	if
+		type(label) == "table"
+		and type(label.displayName) == "string"
+		and label.displayName ~= ""
+	then
+		return label.displayName
+	end
+	if type(label) == "string" and label ~= "" then
+		return label
+	end
+	return combatantId
+end
+
+local function deriveEncounterSurvivorLists(lastEncounter)
+	local finalStates = lastEncounter.finalFighterStatesByCombatantId or {}
+	local survivors = {}
+	local defeated = {}
+
+	for combatantId, fighterState in pairs(finalStates) do
+		if type(fighterState) == "table" and (fighterState.currentHp or 0) > 0 then
+			table.insert(survivors, combatantId)
+		else
+			table.insert(defeated, combatantId)
+		end
+	end
+
+	table.sort(survivors)
+	table.sort(defeated)
+
+	if #survivors > 0 or #defeated > 0 then
+		return survivors, defeated
+	end
+
+	local result = lastEncounter.result
+	return if result ~= nil then result.remainingFighterCombatantIds or {} else {},
+		if result ~= nil then result.defeatedFighterCombatantIds or {} else {}
+end
+
+local function mapCombatantNames(labelsById, combatantIds)
+	local names = {}
+	for _, combatantId in ipairs(combatantIds or {}) do
+		table.insert(names, getCombatantDisplayName(labelsById, combatantId))
+	end
+	return names
+end
+
 function CombatSandboxService.new(config)
 	assert(type(config) == "table", "CombatSandboxService config must be a table")
 	assert(config.snapshotService ~= nil, "CombatSandboxService requires snapshot service")
@@ -95,6 +143,7 @@ function CombatSandboxService.new(config)
 		_stateStore = config.stateStore,
 		_statesByUserId = sandboxStatesByUserId,
 		_encounterService = nil,
+		_fighterRosterService = nil,
 		_cleaner = Cleaner.new(),
 		_publishAccumulator = 0,
 	}, CombatSandboxService)
@@ -111,6 +160,7 @@ function CombatSandboxService:_ensurePlayerState(player)
 		extractionType = DEFAULT_EXTRACTION_TYPE,
 		speedScale = 1,
 		revision = 0,
+		lastStartError = nil,
 	}
 	self._statesByUserId[player.UserId] = state
 
@@ -129,13 +179,65 @@ function CombatSandboxService:_getDebugRunState(player)
 	return self._encounterService:getDebugState(player)
 end
 
-function CombatSandboxService:_buildTrioSnapshot(_player, _state, debugState)
+function CombatSandboxService:_buildTrioSnapshot(player, debugState)
 	local liveByCombatantId = buildCombatantLookup(debugState.liveCombatants)
 	local persistentByCombatantId = debugState.persistentFighters or {}
 	local trio = {}
 	local elapsedTime = if debugState.activeEncounter ~= nil
 		then debugState.activeEncounter.elapsedTime or 0
 		else 0
+	local trioEntries = nil
+
+	if self._fighterRosterService ~= nil then
+		local rosterReadModel = self._fighterRosterService:getReadModel(player)
+		if
+			type(rosterReadModel) == "table"
+			and type(rosterReadModel.trio) == "table"
+			and #rosterReadModel.trio > 0
+		then
+			trioEntries = rosterReadModel.trio
+		end
+	end
+
+	if trioEntries ~= nil then
+		for _, fighter in ipairs(trioEntries) do
+			local liveState = liveByCombatantId[fighter.fighterId]
+			local persistentState = persistentByCombatantId[fighter.fighterId]
+			local currentHp = fighter.computedStats.hp
+			local maxHp = fighter.computedStats.hp
+
+			if persistentState ~= nil then
+				currentHp = persistentState.currentHp or currentHp
+				maxHp = persistentState.maxHp or maxHp
+			end
+
+			if liveState ~= nil then
+				currentHp = liveState.currentHp or currentHp
+				maxHp = liveState.maxHp or maxHp
+			end
+
+			table.insert(trio, {
+				combatantId = fighter.fighterId,
+				displayName = fighter.displayName,
+				classId = fighter.classId,
+				grade = fighter.grade,
+				level = fighter.level,
+				specialSkill = clone(fighter.specialSkill),
+				currentHp = currentHp,
+				maxHp = maxHp,
+				attackIntervalSeconds = fighter.stats.attackIntervalSeconds,
+				specialSkillIds = clone(fighter.usableActiveSkillIds),
+				nextActionInSeconds = if liveState ~= nil
+						and liveState.nextActionAt ~= nil
+					then math.max(liveState.nextActionAt - elapsedTime, 0)
+					else nil,
+				activeStatuses = if liveState ~= nil then clone(liveState.activeStatuses) else {},
+				cooldowns = if liveState ~= nil then clone(liveState.cooldowns) else {},
+			})
+		end
+
+		return trio
+	end
 
 	for _, spec in ipairs(SyntheticScenarioPresets.DefaultFighterTrio) do
 		local fighterSnapshot = CombatStatsBuilder.buildFighterSnapshot(spec)
@@ -160,6 +262,7 @@ function CombatSandboxService:_buildTrioSnapshot(_player, _state, debugState)
 			displayName = classDefinition.displayName,
 			classId = fighterSnapshot.classId,
 			grade = fighterSnapshot.grade,
+			level = fighterSnapshot.level,
 			currentHp = currentHp,
 			maxHp = maxHp,
 			attackIntervalSeconds = fighterSnapshot.computedStats.attackIntervalSeconds,
@@ -232,13 +335,26 @@ function CombatSandboxService:_buildLastEncounterSummary(debugState)
 		return nil
 	end
 
+	local labelsById = debugState.lastEncounter.combatantLabelsById or {}
+	local survivors, defeated = deriveEncounterSurvivorLists(debugState.lastEncounter)
+
 	return {
 		encounterId = debugState.lastEncounter.encounterId,
 		outcome = if debugState.lastEncounter.result ~= nil
 			then debugState.lastEncounter.result.outcome
 			else nil,
+		result = clone(debugState.lastEncounter.result),
 		journalEntries = clone(debugState.lastEncounter.journalEntries or {}),
-		combatantLabelsById = clone(debugState.lastEncounter.combatantLabelsById or {}),
+		combatantLabelsById = clone(labelsById),
+		finalFighterStatesByCombatantId = clone(
+			debugState.lastEncounter.finalFighterStatesByCombatantId or {}
+		),
+		aliveCombatantIds = clone(survivors),
+		downCombatantIds = clone(defeated),
+		aliveDisplayNames = mapCombatantNames(labelsById, survivors),
+		downDisplayNames = mapCombatantNames(labelsById, defeated),
+		survivorCount = #survivors,
+		progression = clone(debugState.lastEncounter.progression),
 	}
 end
 
@@ -267,10 +383,11 @@ function CombatSandboxService:_buildSnapshot(player)
 		extractionType = state.extractionType,
 		selectedEnemyId = state.selectedEnemyId,
 		availableEnemies = clone(AVAILABLE_ENEMIES),
+		lastStartError = state.lastStartError,
 		activeEncounterId = activeEncounterId,
 		encounterState = if activeEncounter ~= nil then activeEncounter.state else nil,
 		elapsedTime = if activeEncounter ~= nil then activeEncounter.elapsedTime or 0 else 0,
-		trio = self:_buildTrioSnapshot(player, state, debugState),
+		trio = self:_buildTrioSnapshot(player, debugState),
 		enemy = if activeEncounterId ~= nil
 			then self:_buildEnemySnapshot(state, debugState)
 			else nil,
@@ -299,13 +416,15 @@ function CombatSandboxService:selectEnemy(player, enemyId)
 	local state = self:_ensurePlayerState(player)
 	EnemyDefinitions.get(enemyId)
 	state.selectedEnemyId = enemyId
+	state.lastStartError = nil
 
-	if self._encounterService ~= nil then
-		self._encounterService:endRun(player)
+	if self._encounterService == nil then
+		self:_publishSnapshot(player)
+		return self:_buildSnapshot(player)
 	end
 
-	self:_publishSnapshot(player)
-	return self:_buildSnapshot(player)
+	self._encounterService:endRun(player)
+	return self:startEncounter(player)
 end
 
 function CombatSandboxService:setSpeedScale(player, speedScale)
@@ -319,7 +438,37 @@ end
 function CombatSandboxService:startEncounter(player)
 	local state = self:_ensurePlayerState(player)
 	assert(self._encounterService ~= nil, "CombatEncounterService is not attached")
-	self._encounterService:startSyntheticRun(player, state.extractionType, state.selectedEnemyId)
+
+	local runOptions = nil
+	if self._fighterRosterService ~= nil then
+		local ok, result = pcall(function()
+			return self._fighterRosterService:getRunSeedPayload(player)
+		end)
+		if ok then
+			runOptions = result
+			state.lastStartError = nil
+		else
+			state.lastStartError = tostring(result)
+		end
+	end
+
+	local ok, result = pcall(function()
+		return self._encounterService:startRun(
+			player,
+			state.extractionType,
+			state.selectedEnemyId,
+			runOptions
+		)
+	end)
+	if not ok then
+		state.lastStartError = tostring(result)
+		self._encounterService:startSyntheticRun(
+			player,
+			state.extractionType,
+			state.selectedEnemyId
+		)
+	end
+
 	self:_publishSnapshot(player)
 	return self:_buildSnapshot(player)
 end
@@ -332,9 +481,10 @@ function CombatSandboxService:endRun(player)
 	return self:_buildSnapshot(player)
 end
 
-function CombatSandboxService:start(encounterService)
+function CombatSandboxService:start(encounterService, fighterRosterService)
 	assert(encounterService ~= nil, "CombatSandboxService requires CombatEncounterService")
 	self._encounterService = encounterService
+	self._fighterRosterService = fighterRosterService
 
 	self._snapshotService:registerTopic(ReplicationTopics.CombatSandbox, function(player)
 		local state = self:_ensurePlayerState(player)
@@ -393,6 +543,7 @@ end
 function CombatSandboxService:stop()
 	self._cleaner:clean()
 	self._encounterService = nil
+	self._fighterRosterService = nil
 	self._publishAccumulator = 0
 	for userId in pairs(self._statesByUserId) do
 		self._statesByUserId[userId] = nil

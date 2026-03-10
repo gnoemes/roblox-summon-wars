@@ -1,0 +1,2 @@
+﻿- Переделать формулу опыта (сейчас от статов, надо считать иначе) Common/Shared/Config/Fighters/Progression.lua
+- 

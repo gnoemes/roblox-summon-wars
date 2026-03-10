@@ -16,6 +16,7 @@ local RuntimeConfig = {
 		Namespaces = table.freeze({
 			Snapshots = "Runtime/Snapshots",
 			Debug = "Runtime/Debug",
+			Fighters = "Runtime/Fighters",
 		}),
 	}),
 	ECS = table.freeze({

@@ -119,6 +119,12 @@
    - Нужно проектировать логику так, чтобы после появления авторитетных runtime-данных fallback автоматически заменялся нормальным значением.
    - При sync/spawn flows нужно учитывать не только первичное создание сущности, но и её обновление при смене активного профиля/loadout, иначе runtime и UI расходятся.
 
+9) **Startup/order discipline и гонки**
+   - Нельзя считать, что зависимый runtime-сервис, player session, snapshot topic или seeded data уже готовы просто потому, что сработал `PlayerAdded`, `feature:start()` или первый кадр клиента. Для таких зависимостей нужен явный `ready` path: retry, lazy ensure, refresh или signal.
+   - Если данные публикуются как one-shot snapshot на старте, нельзя полагаться на один-единственный ранний `publish`. Либо preconditions должны быть гарантированно готовы к моменту publish, либо должен существовать безопасный on-demand refresh/request path.
+   - Client UI и presenters обязаны различать три состояния: `snapshot missing`, `snapshot loaded but empty`, `snapshot loaded with data`. Нельзя скрывать гонки тем, что пустое состояние визуально неотличимо от отсутствующего снапшота.
+   - Server-side services, которые сидируют или поднимают persistent runtime state поверх `PlayerSessionService`, должны либо работать от уже загруженной session, либо сами дожидаться её появления; однократная попытка на старте считается хрупкой.
+
 ---
 
 ## 6) Техническая архитектура проекта
@@ -158,6 +164,9 @@
 - Источник истины для долгоживущих данных: профиль игрока, валюты, ресурсы, inventories/storage, progression/unlocks.
 - Доступ к persistence должен идти через repository contract. Backend можно менять, не переписывая gameplay/service logic.
 - Текущий baseline backend может быть in-memory adapter; later DataStore/backend adapter должен менять только persistence implementation layer.
+- Persistent fighter runtime начинается не с sandbox и не с ECS: fighter documents и roster documents живут в `common/src/shared/Data/FighterDocument.luau` и `common/src/shared/Data/FighterRosterDocument.luau`, а профиль хранит roster в `document.fighters`.
+- Fighter read-models и milestone/comparison calculators должны жить в shared-слое (`common/src/shared/Data/FighterRosterReadModel.luau`, `common/src/shared/Fighters/*`), чтобы их можно было использовать и в Hub UI, и в combat runtime, и в будущем shell-level Fighters menu.
+- Server-authoritative работа с roster/trio должна идти через `common/src/server/Fighters/FighterRosterService.luau`; trio для боевого runtime не должен собираться напрямую из sandbox/test preset-ов, кроме явного dev fallback.
 
 ### 6.5 Replication / snapshots
 - Server snapshot services лежат в `common/src/server/Replication/*`.
@@ -201,7 +210,16 @@
 - System-specific rules for grades должны жить отдельно: например fighter combat scaling в `common/src/shared/Config/Combat/Fighters/GradeModifiers.luau`, а не внутри общего grade registry.
 - Enemy tiers не должны смешиваться с fighter/resource grades; для врагов держать отдельные tier definitions.
 
-### 6.11 Asset workflow
+### 6.11 Fighter runtime / progression
+- Persistent fighter сущность lives in `common/src/shared/Data/FighterDocument.luau`; roster lives in `common/src/shared/Data/FighterRosterDocument.luau`.
+- `FighterRosterService` is the source of truth for roster/trio runtime operations: starter seeding, read-models, active trio updates, combat seed payloads.
+- `FighterProgressionService` applies post-encounter XP/level progression on the server; XP/level changes must not be computed in sandbox/UI layers.
+- Encounter XP must be calculated through a shared fighter experience calculator from real encounter/enemy data (enemy definition stats, flags, extraction type, future modifiers), not from hardcoded `tier -> xp` tables inside server services.
+- Combat runtime should consume fighter combat snapshots built from persistent fighter documents via `FighterProjector`, not synthetic trio definitions, except explicit debug fallback.
+- If encounter completion changes fighter level/stats, the next encounter in the same run must refresh `fighterSnapshots`, `fighterMetadataByCombatantId` and base HP states; do not keep stale run snapshots after progression.
+- Client fighter UI should read roster/trio state from the `Fighters` snapshot topic / fighter runtime client layer, not from sandbox state.
+
+### 6.12 Asset workflow
 - Исходные файлы ресурсов, которые нужно хранить для повторной загрузки, живут в корневой папке `raw/`.
 - `raw/` намеренно не должен попадать в Rojo mapping; не добавляй его в `*.project.json`.
 - Runtime/config слой должен ссылаться только на Roblox asset ids, а не на локальные пути.
@@ -210,6 +228,12 @@
 - Studio plugin не должен писать в Rojo-mapped filesystem modules как в primary workflow: Rojo их перетрет. Для локальной полировки plugin должен писать Studio-only overrides в `ReplicatedStorage/StudioAssetOverrides/*`, а runtime в Studio может читать их поверх project bindings.
 - Если ассеты редактируются через Studio plugin, plugin должен менять binding-слой, а не core combat definitions.
 - На клиенте asset ids нужно нормализовать через shared helper (`common/src/shared/Utils/AssetUri.luau`), а не собирать uri строками в каждом presenter.
+
+### 6.13 Client combat presentation
+- Общие client-side combat presentation helpers должны жить в `common/src/client/Combat/Presentation/*`, а не дублироваться внутри place-specific sandbox/shell feature.
+- Базовые palette/text/widget helper'ы (`Palette`, `Text`, `Widgets`) должны переиспользоваться всеми боевыми presenter'ами: enemy header, fighter world widgets, post-encounter HUD и будущим stand shell.
+- Place-level controller/host не должен заново реализовывать health bar/status strip/skill text rules; его задача — связывать snapshot, presenters и lifecycle.
+- Reusable client combat presenters (`EnemyHeaderPresenter`, `FighterWorldPresenter`, `CombatFeedbackPresenter`, `ResultSummaryPresenter`) должны жить в `common/src/client/Combat/Presenters/*`; place-specific feature может держать только host/dev HUD вроде sandbox menu.
 
 
 

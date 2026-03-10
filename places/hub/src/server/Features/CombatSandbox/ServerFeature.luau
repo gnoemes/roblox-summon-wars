@@ -33,7 +33,10 @@ return {
 			return
 		end
 
-		service:start(context.services:get("CombatEncounterService"))
+		service:start(
+			context.services:get("CombatEncounterService"),
+			context.services:getOptional("FighterRosterService")
+		)
 		context.cleaner:add(service)
 	end,
 }

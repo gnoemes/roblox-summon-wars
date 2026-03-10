@@ -1,5 +1,5 @@
 local ProfileSchema = {
-	CurrentVersion = 1,
+	CurrentVersion = 2,
 	EconomyJournalLimit = 64,
 }
 

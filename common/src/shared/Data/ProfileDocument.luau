@@ -1,4 +1,5 @@
 local ProfileSchema = require(script.Parent.ProfileSchema)
+local FighterRosterDocument = require(script.Parent.FighterRosterDocument)
 
 local ProfileDocument = {}
 
@@ -44,6 +45,7 @@ function ProfileDocument.createNew(userId, nowUnix)
 		wallets = {},
 		resources = {},
 		inventories = {},
+		fighters = FighterRosterDocument.createNew(),
 		flags = {},
 		progression = {},
 		journals = {
@@ -71,6 +73,7 @@ function ProfileDocument.reconcile(rawDocument, userId, nowUnix)
 	document.wallets = document.wallets or {}
 	document.resources = document.resources or {}
 	document.inventories = document.inventories or {}
+	document.fighters = FighterRosterDocument.reconcile(document.fighters)
 	document.flags = document.flags or {}
 	document.progression = document.progression or {}
 	document.journals = document.journals or {}

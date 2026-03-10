@@ -42,6 +42,8 @@ function CombatEncounterService.new(config)
 		_stateStore = config.stateStore,
 		_debugService = config.debugService,
 		_runtimeState = runtimeState,
+		_fighterRunSeedProvider = nil,
+		_encounterCompletedListeners = {},
 	}, CombatEncounterService)
 end
 
@@ -141,14 +143,51 @@ function CombatEncounterService:_spawnEncounter(player, runState)
 	return encounterConfig.encounterId
 end
 
-function CombatEncounterService:startSyntheticRun(player, extractionType, enemyId)
+function CombatEncounterService:setFighterRunSeedProvider(provider)
+	assert(
+		provider == nil or type(provider) == "function",
+		"CombatEncounterService fighter run seed provider must be a function"
+	)
+
+	self._fighterRunSeedProvider = provider
+end
+
+function CombatEncounterService:registerEncounterCompletedListener(listenerId, callback)
+	assert(
+		type(listenerId) == "string" and listenerId ~= "",
+		"listenerId must be a non-empty string"
+	)
+	assert(type(callback) == "function", "callback must be a function")
+
+	self._encounterCompletedListeners[listenerId] = callback
+
+	return function()
+		if self._encounterCompletedListeners[listenerId] == callback then
+			self._encounterCompletedListeners[listenerId] = nil
+		end
+	end
+end
+
+function CombatEncounterService:startRun(player, extractionType, enemyId, runOptions)
 	self:endRun(player)
 
-	local runState = SyntheticCombatFactory.createRun(player, extractionType, enemyId)
+	local nextRunOptions = runOptions
+	if nextRunOptions == nil and self._fighterRunSeedProvider ~= nil then
+		nextRunOptions = {
+			fighterSnapshots = self._fighterRunSeedProvider(player),
+		}
+	end
+
+	local runState =
+		SyntheticCombatFactory.createRun(player, extractionType, enemyId, nextRunOptions)
 	self._runtimeState.runsByUserId[player.UserId] = runState
 	self:_spawnEncounter(player, runState)
 
 	return self:getDebugState(player)
+end
+
+function CombatEncounterService:startSyntheticRun(player, extractionType, enemyId)
+	return self:startRun(player, extractionType, enemyId, {})
 end
 
 function CombatEncounterService:startNextEncounter(player)
@@ -178,12 +217,60 @@ function CombatEncounterService:completeEncounter(encounterId, payload)
 
 	runState.activeEncounterId = nil
 	runState.activeEncounterEntityId = nil
-	runState.lastEncounter = {
+
+	local lastEncounter = {
 		encounterId = encounterId,
-		result = payload.result,
-		journalEntries = payload.journalEntries,
-		combatantLabelsById = payload.combatantLabelsById,
+		result = clone(payload.result),
+		journalEntries = clone(payload.journalEntries),
+		combatantLabelsById = clone(payload.combatantLabelsById),
+		finalFighterStatesByCombatantId = clone(payload.finalFighterStatesByCombatantId),
 	}
+	local ownerPlayer = Players:GetPlayerByUserId(ownerUserId)
+	local listenerPayload = {
+		player = ownerPlayer,
+		ownerUserId = ownerUserId,
+		runInstanceId = runState.runInstanceId,
+		encounterId = encounterId,
+		extractionType = runState.extractionType,
+		enemyId = runState.enemyId,
+		result = clone(payload.result),
+		journalEntries = clone(payload.journalEntries),
+		finalFighterStatesByCombatantId = clone(payload.finalFighterStatesByCombatantId),
+		combatantLabelsById = clone(payload.combatantLabelsById),
+	}
+
+	for listenerId, callback in pairs(self._encounterCompletedListeners) do
+		local ok, listenerPatch = xpcall(function()
+			return callback(listenerPayload)
+		end, debug.traceback)
+		if not ok then
+			warn(
+				string.format(
+					"CombatEncounterService listener %s failed: %s",
+					listenerId,
+					listenerPatch
+				)
+			)
+		elseif type(listenerPatch) == "table" then
+			for patchKey, patchValue in pairs(listenerPatch) do
+				lastEncounter[patchKey] = clone(patchValue)
+			end
+
+			if type(listenerPatch.nextRunFighterSnapshots) == "table" then
+				runState.fighterSnapshots = clone(listenerPatch.nextRunFighterSnapshots)
+			end
+			if type(listenerPatch.fighterMetadataByCombatantId) == "table" then
+				runState.fighterMetadataByCombatantId =
+					clone(listenerPatch.fighterMetadataByCombatantId)
+			end
+			if type(listenerPatch.baseFighterStatesByCombatantId) == "table" then
+				runState.baseFighterStatesByCombatantId =
+					clone(listenerPatch.baseFighterStatesByCombatantId)
+			end
+		end
+	end
+
+	runState.lastEncounter = lastEncounter
 	table.insert(runState.completedEncounterIds, encounterId)
 	runState.persistentFighterStatesByCombatantId = EncounterPersistencePolicy.apply(
 		runState.extractionType,
@@ -191,10 +278,18 @@ function CombatEncounterService:completeEncounter(encounterId, payload)
 		payload.finalFighterStatesByCombatantId
 	)
 
+	for combatantId, baseState in pairs(runState.baseFighterStatesByCombatantId) do
+		local persistentState = runState.persistentFighterStatesByCombatantId[combatantId]
+		if persistentState ~= nil then
+			persistentState.maxHp = baseState.maxHp
+			persistentState.currentHp = math.min(persistentState.currentHp, baseState.maxHp)
+		end
+	end
+
 	if runState.extractionType == "HuntingGrounds" and payload.result.outcome == "Victory" then
-		local player = Players:GetPlayerByUserId(ownerUserId)
-		if player ~= nil then
-			self:_spawnEncounter(player, runState)
+		local nextPlayer = Players:GetPlayerByUserId(ownerUserId)
+		if nextPlayer ~= nil then
+			self:_spawnEncounter(nextPlayer, runState)
 		end
 	end
 end
@@ -343,6 +438,9 @@ function CombatEncounterService:stop()
 		end
 		self._runtimeState.runsByUserId[userId] = nil
 	end
+
+	self._fighterRunSeedProvider = nil
+	table.clear(self._encounterCompletedListeners)
 end
 
 return CombatEncounterService

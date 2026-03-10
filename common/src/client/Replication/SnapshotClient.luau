@@ -67,17 +67,23 @@ function SnapshotClient:_applyEnvelope(envelope)
 	end
 end
 
-function SnapshotClient:start()
-	self._cleaner:add(self._pushRemote.OnClientEvent:Connect(function(envelope)
-		self:_applyEnvelope(envelope)
-	end))
-
+function SnapshotClient:requestAll()
 	local envelopes = self._requestAllRemote:InvokeServer()
 	if type(envelopes) == "table" then
 		for _, envelope in ipairs(envelopes) do
 			self:_applyEnvelope(envelope)
 		end
 	end
+
+	return envelopes
+end
+
+function SnapshotClient:start()
+	self._cleaner:add(self._pushRemote.OnClientEvent:Connect(function(envelope)
+		self:_applyEnvelope(envelope)
+	end))
+
+	self:requestAll()
 end
 
 function SnapshotClient:getEnvelope(topic)
