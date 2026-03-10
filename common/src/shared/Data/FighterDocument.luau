@@ -14,6 +14,11 @@ local GradeIds = require(
 		:WaitForChild("Grades")
 		:WaitForChild("GradeIds")
 )
+local FighterLoadoutRules = require(
+	ReplicatedStorage:WaitForChild("Shared")
+		:WaitForChild("Fighters")
+		:WaitForChild("FighterLoadoutRules")
+)
 
 export type FighterDocument = {
 	fighterId: string,
@@ -80,6 +85,12 @@ function FighterDocument.assert(value, fieldName)
 	BaseCombatStats.assert(value.baseStats, string.format("%s.baseStats", fieldName))
 	Contract.assertString(value.specialSkillId, string.format("%s.specialSkillId", fieldName))
 	Contract.assertStringArray(value.activeSkillIds, string.format("%s.activeSkillIds", fieldName))
+	FighterLoadoutRules.assertActiveOnlySpecialLoadout(
+		value.classId,
+		value.specialSkillId,
+		value.activeSkillIds,
+		fieldName
+	)
 	Contract.assertOptionalString(value.traitId, string.format("%s.traitId", fieldName))
 	Contract.assertOptionalString(value.subclassId, string.format("%s.subclassId", fieldName))
 	Contract.assertOptionalString(value.sourceTag, string.format("%s.sourceTag", fieldName))

@@ -118,6 +118,7 @@
    - Если runtime использует временный fallback до появления реальных данных/объектов (например, позиция до появления `HumanoidRootPart`, placeholder view state, bootstrap snapshot), этот fallback нельзя безусловно кэшировать как окончательное состояние.
    - Нужно проектировать логику так, чтобы после появления авторитетных runtime-данных fallback автоматически заменялся нормальным значением.
    - При sync/spawn flows нужно учитывать не только первичное создание сущности, но и её обновление при смене активного профиля/loadout, иначе runtime и UI расходятся.
+- Synthetic/default fallback для combat/fighter runtime должен включаться только явно через dev/scenario path. Production path не должен молча деградировать в synthetic данные при ошибке загрузки roster/session.
 
 9) **Startup/order discipline и гонки**
    - Нельзя считать, что зависимый runtime-сервис, player session, snapshot topic или seeded data уже готовы просто потому, что сработал `PlayerAdded`, `feature:start()` или первый кадр клиента. Для таких зависимостей нужен явный `ready` path: retry, lazy ensure, refresh или signal.
@@ -200,6 +201,7 @@
   - региональный контент в `common/src/shared/Config/Combat/Regions/<Region>/*`
 - Class package должен описывать `class` и `skillPool`, а не назначать конкретный активный скилл бойцу.
 - Fighter business model / snapshot должен хранить отдельно экипированные активные скиллы через `activeSkillIds`.
+- Текущий fighter runtime intentionally supports only `Active` fighter special skills in persistent fighter documents/loadouts. Если новый класс или generated fighter использует passive/trigger special, это считается unsupported content до появления отдельного passive/trigger combat pipeline.
 - Если позже появятся rolled/owned skill pools у конкретного бойца, они должны жить в persistent/session model, а не в ECS-компонентах.
 - ECS/runtime combat state должен получать только реально активные способности, cooldowns и другой live state, нужный симуляции.
 - Status application model split is fixed: DoT (`Poison`, `Bleed`, etc.) не должен использовать общий chance-vs-resist pipeline. Control/utility эффекты используют chance/resist; DoT использует target response (`Normal`, `Immune`, `Vulnerable`) из отдельного profile/rules слоя.

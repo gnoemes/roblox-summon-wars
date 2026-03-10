@@ -199,7 +199,11 @@ function CombatSandboxService:_buildTrioSnapshot(player, debugState)
 		end
 	end
 
-	if trioEntries ~= nil then
+	if self._fighterRosterService ~= nil then
+		if trioEntries == nil then
+			return trio
+		end
+
 		for _, fighter in ipairs(trioEntries) do
 			local liveState = liveByCombatantId[fighter.fighterId]
 			local persistentState = persistentByCombatantId[fighter.fighterId]
@@ -439,36 +443,44 @@ function CombatSandboxService:startEncounter(player)
 	local state = self:_ensurePlayerState(player)
 	assert(self._encounterService ~= nil, "CombatEncounterService is not attached")
 
-	local runOptions = nil
+	local ok = false
+	local result = nil
+
 	if self._fighterRosterService ~= nil then
-		local ok, result = pcall(function()
+		local runOptionsOk, runOptionsResult = pcall(function()
 			return self._fighterRosterService:getRunSeedPayload(player)
 		end)
-		if ok then
-			runOptions = result
-			state.lastStartError = nil
-		else
-			state.lastStartError = tostring(result)
+		if not runOptionsOk then
+			state.lastStartError = tostring(runOptionsResult)
+			self:_publishSnapshot(player)
+			return self:_buildSnapshot(player)
 		end
+
+		ok, result = pcall(function()
+			return self._encounterService:startRun(
+				player,
+				state.extractionType,
+				state.selectedEnemyId,
+				runOptionsResult
+			)
+		end)
+	else
+		ok, result = pcall(function()
+			return self._encounterService:startSyntheticRun(
+				player,
+				state.extractionType,
+				state.selectedEnemyId
+			)
+		end)
 	end
 
-	local ok, result = pcall(function()
-		return self._encounterService:startRun(
-			player,
-			state.extractionType,
-			state.selectedEnemyId,
-			runOptions
-		)
-	end)
 	if not ok then
 		state.lastStartError = tostring(result)
-		self._encounterService:startSyntheticRun(
-			player,
-			state.extractionType,
-			state.selectedEnemyId
-		)
+		self:_publishSnapshot(player)
+		return self:_buildSnapshot(player)
 	end
 
+	state.lastStartError = nil
 	self:_publishSnapshot(player)
 	return self:_buildSnapshot(player)
 end

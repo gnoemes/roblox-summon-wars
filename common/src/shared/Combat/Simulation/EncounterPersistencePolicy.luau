@@ -1,12 +1,8 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local ExtractionTypeIds = require(
-	ReplicatedStorage:WaitForChild("Shared")
-		:WaitForChild("Extractions")
-		:WaitForChild("ExtractionTypeIds")
-)
-
 local EncounterPersistencePolicy = {}
+
+local HUNTING_GROUNDS = "HuntingGrounds"
+local DUNGEON = "Dungeon"
+local RAID = "Raid"
 
 local function clonePersistentStateMap(source)
 	local cloned = {}
@@ -25,14 +21,11 @@ function EncounterPersistencePolicy.apply(
 	baseStatesByCombatantId,
 	finalStatesByCombatantId
 )
-	if extractionType == ExtractionTypeIds.Values[1] then
+	if extractionType == HUNTING_GROUNDS then
 		return clonePersistentStateMap(baseStatesByCombatantId)
 	end
 
-	if
-		extractionType == ExtractionTypeIds.Values[2]
-		or extractionType == ExtractionTypeIds.Values[3]
-	then
+	if extractionType == DUNGEON or extractionType == RAID then
 		return clonePersistentStateMap(finalStatesByCombatantId)
 	end
 

@@ -59,7 +59,13 @@ local function normalizeFighterSnapshots(runOptions)
 		return fighterSnapshots
 	end
 
-	return buildDefaultFighterSnapshots()
+	if type(runOptions) == "table" and runOptions.allowDefaultFighterFallback == true then
+		return buildDefaultFighterSnapshots()
+	end
+
+	error(
+		"Run fighterSnapshots are required unless allowDefaultFighterFallback is explicitly enabled"
+	)
 end
 
 local function buildDerivedFighterData(fighterSnapshots)

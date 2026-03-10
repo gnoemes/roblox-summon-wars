@@ -187,7 +187,9 @@ function CombatEncounterService:startRun(player, extractionType, enemyId, runOpt
 end
 
 function CombatEncounterService:startSyntheticRun(player, extractionType, enemyId)
-	return self:startRun(player, extractionType, enemyId, {})
+	return self:startRun(player, extractionType, enemyId, {
+		allowDefaultFighterFallback = true,
+	})
 end
 
 function CombatEncounterService:startNextEncounter(player)
